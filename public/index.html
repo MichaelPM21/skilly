@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skilly · Servicios profesionales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/workspace.css">
+</head>
+<body>
+
+<header class="nav">
+  <a class="brand" href="#" onclick="page('home')"><i></i>skilly</a>
+  <div class="links">
+    <a data-page="home" onclick="page('home')">Inicio</a>
+    <a data-page="market" onclick="page('market')">Explorar servicios</a>
+    <a data-page="how" onclick="page('how')">Cómo funciona</a>
+    <a data-page="dashboard" onclick="page('dashboard')" style="display:none">Mi panel</a>
+    
+    
+  </div>
+  <div class="navRight">
+    <div id="guestBox" style="display:flex">
+      <button class="btn ghost" onclick="openM('login');setLoginRole('organizacion')">Ingresar</button>
+      <button class="btn primary" onclick="openRegister()">Crear cuenta</button>
+    </div>
+    <div id="sessionBox" class="session" style="display:none">
+      <div class="who"><b id="sessionName"></b><span id="sessionRole"></span></div>
+      <button class="btn small outline" onclick="page('dashboard')" id="sessionDashBtn">Panel</button>
+      <button class="btn small ghost" onclick="logout()">Salir</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="home" class="page active">
+  <div class="hero">
+    <div>
+      <small>PLATAFORMA DE TALENTO · SERVICIOS · CONFIANZA</small>
+      <h1>Encuentra el talento que tu negocio necesita.</h1>
+      <p>Conecta con profesionales validados, compara alternativas, agenda servicios y gestiona todo — incluido el pago — en un solo lugar.</p>
+      <div class="search"><input id="heroInput" placeholder="¿Qué servicio necesitas?"><button class="btn primary" onclick="search()">Buscar servicios</button></div>
+      <div class="tags">
+        <button onclick="quick('Tecnología')">Tecnología</button>
+        <button onclick="quick('Marketing')">Marketing</button>
+        <button onclick="quick('Diseño')">Diseño</button>
+        <button onclick="quick('Consultoría')">Consultoría</button>
+      </div>
+    </div>
+    <div class="heroCard">
+      <div class="verifiedTop">✓ Profesional validado<br><small>Identidad y experiencia revisadas por Skilly</small></div>
+      <div class="person"><div class="avatar">UX</div><div><b>Servicio de diseño UX/UI</b><span>Diseñadora UX/UI</span><span>★ Recomendada por Skilly</span></div></div>
+      <hr style="border:none;border-top:1px solid var(--border-light)">
+      <div class="row">Diseño UX/UI <b>Desde $35.000</b></div>
+      <div class="row">Disponibilidad <b>Esta semana</b></div>
+      <button class="btn primary full" onclick="page('market')">Ver servicios</button>
+    </div>
+  </div>
+  <div class="stats">
+    <div><b id="statProf">—</b><span>Servicios disponibles</span></div>
+    <div><b id="statBookings">—</b><span>Tus reservas</span></div>
+    <div><b>100%</b><span>Perfiles trazables</span></div>
+    <div><b>0</b><span>Rankings públicos por estrellas</span></div>
+  </div>
+  <div class="section">
+    <small>MARKETPLACE</small><h2>Servicios para cada necesidad</h2>
+    <div class="cats">
+      <button onclick="quick('Tecnología')">⌘<b>Tecnología</b><span>Desarrollo, datos, soporte</span></button>
+      <button onclick="quick('Marketing')">↗<b>Marketing</b><span>Digital, contenido, ventas</span></button>
+      <button onclick="quick('Diseño')">◇<b>Diseño</b><span>UX/UI, branding, gráfico</span></button>
+      <button onclick="quick('Consultoría')">◉<b>Consultoría</b><span>Negocios, estrategia, RRHH</span></button>
+    </div>
+  </div>
+  <div class="section light">
+    <small>SIMPLE Y TRAZABLE</small><h2>Del problema al profesional</h2>
+    <div class="steps">
+      <div><b>01 · Busca</b><p>Encuentra profesionales por servicio y especialidad.</p></div>
+      <div><b>02 · Compara</b><p>Revisa validación, experiencia y disponibilidad real.</p></div>
+      <div><b>03 · Agenda</b><p>Selecciona un horario libre en la agenda del profesional.</p></div>
+      <div><b>04 · Paga y gestiona</b><p>Pago retenido hasta confirmar la entrega, con evaluación interna.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="market" class="page">
+  <div class="head"><small>MARKETPLACE SKILLY</small><h1>Explora servicios</h1><p>Encuentra el perfil adecuado para tu proyecto. Servicios revisados por Skilly. Conocerás al profesional después del pago.</p></div>
+  <div class="market">
+    <aside>
+      <b>Filtrar resultados</b>
+      <label>Especialidad
+        <select id="cat" onchange="renderMarket()">
+          <option value="">Todas</option><option>Tecnología</option><option>Marketing</option><option>Diseño</option><option>Consultoría</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="onlyValidated" checked onchange="renderMarket()" style="width:auto;display:inline-block;margin-right:6px"> Solo validados</label>
+    </aside>
+    <div>
+      <div class="searchbar"><input id="q" placeholder="Buscar servicio o especialidad..." oninput="renderMarket()"><button class="btn primary">Buscar</button></div>
+      <div id="results" class="results"></div>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="page">
+  <div class="simple">
+    <small>CÓMO FUNCIONA</small>
+    <h1>Un ecosistema para conectar, contratar y gestionar talento.</h1>
+    <div class="roles">
+      <div><h2>Para organizaciones</h2><p>Busca → compara → agenda → paga → confirma entrega → evalúa (de forma privada).</p><button class="btn primary" onclick="page('market')">Buscar servicios</button></div>
+      <div><h2>Para profesionales</h2><p>Crea tu perfil → envía tus antecedentes a validación → publica servicios → configura disponibilidad → recibe reservas y pagos.</p><button class="btn dark" onclick="openRegister()">Ofrecer servicios</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="dashboard" class="page">
+  <div class="dash"><small>MI PANEL</small><h1 style="font-size:30px;margin:8px 0 22px">Panel</h1><div id="dashContent"></div></div>
+</section>
+
+
+
+
+
+<section id="docs" class="page">
+  <div class="docsBody">
+    <small>DOCUMENTACIÓN TÉCNICA</small>
+    <h1>Qué es real en este proyecto y qué falta por conectar</h1>
+    <p>Este proyecto corre sobre un backend Node/Express propio con base de datos SQLite real (server/skilly.db), persistente en disco. Reproduce el flujo completo: registro y validación de profesionales, marketplace, agendamiento sin doble reserva (verificado en el servidor), pago registrado y liquidación simulada autorizada por Skilly tras confirmar la entrega, y evaluaciones privadas que el servidor solo entrega a peticiones autenticadas de administrador.</p>
+    <h2>✅ Real en este proyecto</h2>
+    <ul>
+      <li>Base de datos SQL real (SQLite) con tablas propias, ver <code>server/db.js</code>.</li>
+      <li>API REST propia (<code>server/index.js</code>), documentada en el README.</li>
+      <li>Privacidad de evaluaciones aplicada en el servidor: la ruta pública <code>/api/professionals</code> nunca incluye evaluaciones; solo <code>/api/admin/evaluations</code> las expone, y exige una sesión administrativa.</li>
+      <li>Agendamiento con verificación de disponibilidad y bloqueo de doble reserva en el servidor (no solo en el navegador).</li>
+      <li>Flujo de pago retenido → liberado.</li>
+    </ul>
+    <div class="callout"><b>Cuentas protegidas:</b> contraseñas con hash, sesiones en servidor y permisos por rol. La identidad se revela únicamente al cliente después del pago confirmado.</div>
+    <h2>💳 Pagos reales — Webpay Plus y PayPal</h2>
+    <p>El checkout ahora se conecta con pasarelas de pago reales:</p>
+    <ul>
+      <li><b>Webpay Plus (Transbank):</b> integración real usando el SDK oficial, en el <b>ambiente de integración/pruebas</b> de Transbank (con credenciales públicas de prueba — no requiere configuración adicional para probarlo, pero tampoco cobra dinero real). Ver README para tarjetas de prueba y el paso a producción.</li>
+      <li><b>PayPal:</b> integración real vía la API de Órdenes v2, en modo <b>sandbox</b>. Requiere que configures tu propia app gratuita de PayPal Developer en <code>.env</code> (<code>PAYPAL_CLIENT_ID</code> / <code>PAYPAL_CLIENT_SECRET</code>). PayPal no admite pesos chilenos, así que el monto se convierte a USD con una tasa configurable.</li>
+      <li>El comprobante ("cheque electrónico") que se genera tras el pago ahora incluye datos reales de la transacción: código de autorización, últimos 4 dígitos de la tarjeta (Webpay) o ID de captura (PayPal).</li>
+    </ul>
+    <h2>🔧 Simulado / pendiente de integración real</h2>
+    <ul>
+      <li><b>Boletas / facturas electrónicas:</b> el comprobante descargable no es aún un documento tributario válido ante el SII. Se requiere un proveedor autorizado (ej. Haulmer/OpenFactura, Bsale).</li>
+      <li><b>Liquidación al profesional:</b> se registra de forma simulada, con comisión y monto neto. No realiza transferencias bancarias.</li>
+      <li><b>Aviso por Gmail:</b> el envío de correo funciona de verdad (Nodemailer + Gmail), pero requiere que configures tu propia cuenta de Gmail con una "contraseña de aplicación" en <code>.env</code> — sin eso, la solicitud se guarda igual pero no se envía el correo.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<svg class="skilly-art-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+  <path id="skilly-ridge" d="M-100 180C65 230 125 5 310 60S560 240 760 115 1020 20 1230 110"/>
+  <g id="skilly-waves" fill="none" stroke="currentColor" stroke-width="1.5">
+    <use href="#skilly-ridge"/><use href="#skilly-ridge" y="10"/><use href="#skilly-ridge" y="20"/>
+    <use href="#skilly-ridge" y="30"/><use href="#skilly-ridge" y="40"/><use href="#skilly-ridge" y="50"/>
+    <use href="#skilly-ridge" y="60"/><use href="#skilly-ridge" y="70"/><use href="#skilly-ridge" y="80"/>
+  </g>
+</defs></svg>
+<footer class="publicFooter">
+  <svg class="footerWaves" viewBox="0 0 1100 300" preserveAspectRatio="none" aria-hidden="true"><use href="#skilly-waves"/></svg>
+  <div class="footerInner">
+    <b class="footerBrand"><i></i>skilly</b>
+    <nav class="footerPages" aria-label="Navegación al pie">
+      <a href="#home" onclick="page('home');return false">Inicio</a>
+      <a href="#market" onclick="page('market');return false">Explorar servicios</a>
+      <a href="#how" onclick="page('how');return false">Cómo funciona</a>
+    </nav>
+    <div class="footerBase"><span>© 2026 Skilly</span>
+      <div class="fLinks">
+        <a href="#docs" onclick="page('docs');return false">Documentación técnica</a>
+        <a id="adminAccess" href="http://localhost:3001">Acceso administrador</a>
+        <a href="#reserva" onclick="openGuestRecovery();return false">Consultar reserva de invitado</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<dialog id="authDialog" class="authDialog" aria-labelledby="authLoginTitle">
+  <div class="authCard">
+    <button class="authClose" type="button" aria-label="Cerrar" onclick="closeM('authDialog')">×</button>
+    <aside class="authStory">
+      <strong class="authBrand"><i></i>skilly</strong>
+      <svg viewBox="0 0 620 280" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#skilly-waves"/></svg>
+      <div class="authInvite" data-invite="login"><h3>¿Primera vez en Skilly?</h3><p>Crea tu cuenta para contratar servicios u ofrecer tu experiencia.</p><button type="button" onclick="openRegister()">Crear cuenta <span aria-hidden="true">→</span></button></div>
+      <div class="authInvite" data-invite="register" hidden><h3>¿Ya tienes cuenta?</h3><p>Ingresa para revisar tus reservas y continuar donde quedaste.</p><button type="button" onclick="openM('login')">Ingresar <span aria-hidden="true">→</span></button></div>
+    </aside>
+    <div class="authForms box">
+      <section id="login">
+        <small>ACCESO A TU CUENTA</small><h2 id="authLoginTitle">Ingresa a Skilly</h2>
+        <p class="authIntro">Usa el correo de tu cuenta de organización o profesional.</p>
+        <form onsubmit="event.preventDefault();doLogin()">
+          <div id="loginFieldsOrgPro">
+            <label>Correo electrónico<input required type="email" id="loginEmail" autocomplete="username" placeholder="tu@empresa.cl"></label>
+            <label>Contraseña<input required type="password" id="accountPassword" autocomplete="current-password"></label>
+          </div>
+          <button type="button" class="authTextButton" onclick="closeM('login');openRecovery()">Recuperar acceso</button>
+          <button class="btn primary full" type="submit">Ingresar</button>
+        </form>
+      </section>
+      <section id="register" hidden>
+        <small>ÚNETE A SKILLY</small><h2 id="authRegisterTitle" tabindex="-1">Crea tu cuenta</h2>
+  <div class="stepbar" id="regStepbar"><div class="on"></div><div></div></div>
+
+  <div id="regStepRole">
+    <p class="hint">¿Cómo quieres usar Skilly?</p>
+    <div class="rolesel">
+      <button data-role="organizacion" onclick="chooseRegRole('organizacion')">Organización</button>
+      <button data-role="profesional" onclick="chooseRegRole('profesional')">Profesional independiente</button>
+    </div>
+  </div>
+
+  <div id="regStepOrg" style="display:none">
+    <label>Nombre de la organización<input id="orgName" placeholder="Nombre o empresa"></label>
+    <label>Correo<input type="email" id="orgEmail" placeholder="correo@empresa.cl"></label><label>Contraseña (mínimo 12 caracteres)<input id="orgPassword" type="password" autocomplete="new-password" minlength="12"></label>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn outline" onclick="regBack()">Atrás</button>
+      <button class="btn primary full" onclick="submitOrgRegister()">Crear cuenta</button>
+    </div>
+  </div>
+
+  <div id="regStepProBasic" style="display:none">
+    <p class="hint">Paso 1 de 2: cuéntanos sobre tu servicio.</p>
+    <div class="formgrid2">
+      <label>Nombre completo<input id="proName" placeholder="Tu nombre"></label>
+      <label>Correo<input type="email" id="proEmail" placeholder="tu@correo.cl"></label><label>Contraseña (mínimo 12 caracteres)<input id="proPassword" type="password" autocomplete="new-password" minlength="12"></label>
+    </div>
+    <div class="formgrid2">
+      <label>Especialidad<select id="proCategory"><option>Tecnología</option><option>Marketing</option><option>Diseño</option><option>Consultoría</option></select></label>
+      <label>Modalidad<select id="proModality"><option>Remoto</option><option>Híbrido</option><option>Presencial</option></select></label>
+    </div>
+    <label>Título / rol profesional<input id="proTitle" placeholder="Ej: Diseñador UX/UI"></label>
+    <div class="formgrid2">
+      <label>Tarifa referencial<input id="proPrice" placeholder="$35.000"></label>
+      <label>Etiquetas (separadas por coma)<input id="proTags" placeholder="Figma, UX, Research"></label>
+    </div>
+    <label>Descripción breve de tus servicios<textarea id="proDesc" placeholder="¿Qué haces y para quién?"></textarea></label>
+    <label>Días en que sueles estar disponible</label>
+    <div class="checkgrid">
+      <label><input type="checkbox" class="proDay" value="Lunes" checked> Lunes</label>
+      <label><input type="checkbox" class="proDay" value="Martes"> Martes</label>
+      <label><input type="checkbox" class="proDay" value="Miércoles" checked> Miércoles</label>
+      <label><input type="checkbox" class="proDay" value="Jueves"> Jueves</label>
+      <label><input type="checkbox" class="proDay" value="Viernes" checked> Viernes</label>
+      <label><input type="checkbox" class="proDay" value="Sábado"> Sábado</label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn outline" onclick="regBack()">Atrás</button>
+      <button class="btn primary full" onclick="regProNext()">Continuar a validación</button>
+    </div>
+  </div>
+
+  <div id="regStepProValidation" style="display:none">
+    <p class="hint">Paso 2 de 2: validación de antecedentes. Un administrador de Skilly revisará esta información antes de que tu perfil sea visible para las organizaciones.</p>
+    <label>Perfil de LinkedIn (público)<input id="valLinkedin" placeholder="https://linkedin.com/in/tu-usuario"></label>
+    <div class="formgrid2">
+      <label>Años de experiencia<input id="valYears" placeholder="Ej: 5"></label>
+      <label>Certificaciones (si tienes)<input id="valCerts" placeholder="Ej: PMP, Google UX"></label>
+    </div>
+    <label>CV / antecedentes (pega un enlace o resumen)<textarea id="valCv" placeholder="Enlace a tu CV o resumen de tu trayectoria"></textarea></label>
+    <label>Referencias laborales<textarea id="valRefs" placeholder="Nombre de empresa/persona y contacto"></textarea></label>
+    <label>Portafolio (opcional)<input id="valPortfolio" placeholder="https://..."></label>
+    <label>¿Por qué quieres ofrecer tus servicios en Skilly?<textarea id="valMotivation"></textarea></label>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn outline" onclick="regBack()">Atrás</button>
+      <button class="btn primary full" onclick="submitProValidation()">Enviar a validación</button>
+    </div>
+  </div>
+
+  <div id="regStepDone" style="display:none">
+    <div class="verifiedTop" style="background:var(--green-bg)">✓ Solicitud enviada<br><small>Un administrador de Skilly revisará tus antecedentes.</small></div>
+    <p class="hint" style="margin-top:14px">Podrás ver el estado de tu validación en tu panel en cualquier momento.</p>
+    <button class="btn primary full" onclick="finishRegister()">Ir a mi panel</button>
+  </div>
+    </section>
+    </div>
+  </div>
+</dialog>
+
+<div id="profile" class="modal"><div class="box" id="profileBox"></div></div>
+<div id="booking" class="modal"><div class="box" id="bookingBox"></div></div>
+<div id="checkout" class="modal"><div class="box" id="checkoutBox"></div></div>
+
+<div id="guestBooking" class="modal"><div class="box" id="guestBookingBox"></div></div>
+<div id="guestDone" class="modal"><div class="box">
+  <button class="close" onclick="closeM('guestDone')">×</button>
+  <small>SOLICITUD ENVIADA</small><h2>Skilly te contactará</h2>
+  <div class="verifiedTop" style="background:var(--green-bg)">✓ Recibimos tu solicitud<br><small>Un administrador de Skilly se pondrá en contacto contigo para coordinar el servicio y el método de pago.</small></div>
+  <p class="hint" id="guestDoneEmailNote" style="margin-top:14px"></p>
+  <button class="btn primary full" onclick="closeM('guestDone');page('home')">Entendido</button>
+</div></div>
+
+<div id="evaluate" class="modal"><div class="box">
+  <button class="close" onclick="closeM('evaluate')">×</button>
+  <small>EVALUACIÓN PRIVADA</small><h2>Confirmar y evaluar</h2>
+  <p class="hint">Esta evaluación es privada: solo la ve el equipo de Skilly y se usa como argumento interno sobre el profesional, nunca como ranking público.</p>
+  <label>Puntaje</label>
+  <div class="starPick" id="starPick">
+    <span data-n="1" onclick="pickStar(1)">★</span><span data-n="2" onclick="pickStar(2)">★</span><span data-n="3" onclick="pickStar(3)">★</span><span data-n="4" onclick="pickStar(4)">★</span><span data-n="5" onclick="pickStar(5)">★</span>
+  </div>
+  <input type="hidden" id="evalStars" value="0">
+  <label>Argumento de tu evaluación<textarea id="evalComment" placeholder="¿Qué funcionó bien? ¿Qué se podría mejorar?"></textarea></label>
+  <button class="btn primary full" onclick="submitEvaluation()">Confirmar entrega y enviar evaluación</button>
+</div></div>
+
+<div id="cancelBooking" class="modal"><div class="box" id="cancelBookingBox"></div></div>
+
+<div id="chat" class="modal"><div class="box" id="chatBox"></div></div>
+
+<script src="/js/app.js"></script>
+<script src="/js/workspace.js"></script><script src="/js/policies.js"></script>
+<div id="workspaceModal" class="modal"><div class="box wide" id="workspaceBox"></div></div>
+</body>
+</html>
+

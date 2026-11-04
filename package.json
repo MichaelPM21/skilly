@@ -1,0 +1,25 @@
+{
+  "name": "skilly-prototipo",
+  "version": "2.0.0",
+  "description": "Prototipo funcional de Skilly: marketplace de profesionales independientes, con validación, agendamiento, pago retenido y evaluaciones privadas.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node scripts/start.js",
+    "start:public": "node server/index.js",
+    "start:admin": "node server/admin.js",
+    "dev": "node scripts/start.js",
+    "admin:create": "node scripts/create-admin.js",
+    "db:backup": "node scripts/backup.js",
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/check.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "nodemailer": "^10.0.10",
+    "transbank-sdk": "^6.1.1"
+  }
+}

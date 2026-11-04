@@ -1,0 +1,13 @@
+node_modules/
+.env
+server/skilly.db
+server/skilly.db-journal
+server/skilly.db-wal
+server/skilly.db-shm
+.DS_Store
+
+.local/
+*.db
+*.db-wal
+*.db-shm
+.env.*.local

@@ -1,0 +1,17 @@
+require('dotenv').config();
+const readline=require('node:readline/promises');
+const {migrate}=require('../server/schema');const {db,seedIfEmpty}=require('../server/db');const S=require('../server/security');
+(async()=>{
+ if(process.env.SEED_DEMO==='true')seedIfEmpty();
+ migrate();const rl=readline.createInterface({input:process.stdin,output:process.stdout});
+ const email=(process.env.BOOTSTRAP_ADMIN_EMAIL||await rl.question('Correo del administrador: ')).trim().toLowerCase();
+ const name=process.env.BOOTSTRAP_ADMIN_NAME||await rl.question('Nombre: ');
+ // Generated credential is printed once locally; no shared default password exists.
+ const password=process.env.BOOTSTRAP_ADMIN_PASSWORD||S.random().slice(0,20);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!name)throw new Error('Correo y nombre obligatorios.');
+ if(db.prepare('SELECT 1 FROM users WHERE email=?').get(email))throw new Error('Ya existe una cuenta con ese correo.');
+ const hashed=await S.passwordHash(password);
+ db.prepare("INSERT INTO users(id,email,name,password_hash,role,verified,created_at) VALUES(?,?,?,?,'admin',1,?)").run(S.id('usr'),email,name,hashed,Date.now());
+ console.log('Administrador creado.');if(!process.env.BOOTSTRAP_ADMIN_PASSWORD)console.log('Contraseña inicial (guárdala): '+password);
+ rl.close();db.close();
+})().catch(e=>{console.error(e.message);process.exit(1);});

@@ -1,0 +1,185 @@
+/* Preserve the original green identity, cards and typography in both themes. */
+:root[data-theme="light"]{color-scheme:light;--surface:#fff;--page:#fff;--ink:#17202a;--ink-soft:#52606c;--border:#dbe3e7;--border-light:#e9eef0;--bg-light:#f6f9f8;--green:#117e4d;--green-bg:#e8f8ef;--green-bg2:#e7f5ed;--amber:#805800;--amber-bg:#fff1ce;--red:#a72b22;--red-bg:#fdecea}
+:root[data-theme="dark"]{color-scheme:dark;--surface:#182126;--page:#10171b;--ink:#eff5f2;--ink-soft:#b6c6c0;--border:#35463f;--border-light:#2a3832;--bg-light:#202d27;--green:#69dda0;--green-bg:#163e2c;--green-bg2:#194631;--amber:#f6ce76;--amber-bg:#443719;--red:#ffb4ab;--red-bg:#462824}
+body{background:var(--page)!important;color:var(--ink);overflow-x:hidden;line-height:1.5}
+body .nav{background:var(--surface)!important;color:var(--ink);gap:16px}
+input,textarea,select{background:var(--surface)!important;color:var(--ink)!important;border:1px solid var(--border)!important;font:inherit;min-width:0;max-width:100%}
+input:disabled{opacity:.75}input[type=checkbox]{accent-color:#159c5d;width:auto;flex:none}label{color:var(--ink)}
+:focus-visible{outline:3px solid var(--green);outline-offset:3px}button,a{touch-action:manipulation}button{font:inherit}button,a[onclick]{cursor:pointer}
+body .btn.primary,body .btn.dark{background:#137e4c;color:#fff}body .btn.primary:hover,body .btn.dark:hover{background:#0f693f}
+.btn{min-height:38px;white-space:normal}.btn.ghost,.btn.outline{color:var(--ink)}
+body .box,body .dashCard,body .heroCard,body .card,body .kpiCard,body .adminRow,body .search,body .searchbar,body .payMethodBtn,body .calendarShell,body .adminWelcome{background:var(--surface)!important;color:var(--ink);border-color:var(--border)}
+body .head,body .light,body .panelHead,body .testCardBox,body .callout{background:var(--bg-light);color:var(--ink)}
+body .hint,body .kpiLabel,body .kpiSub,body .person span,body small{color:var(--ink-soft)}
+body .verifiedTop,body .verified,body .chip{background:var(--green-bg);color:var(--green)}body .verifiedTop small{color:var(--ink)}
+body .chatMsg{background:var(--bg-light);color:var(--ink)}body .chatMsg-mine{background:var(--green-bg)}
+body .modal{background:#07120fb3;z-index:100}.modal .box{max-height:90dvh;overflow-y:auto;width:min(720px,calc(100vw - 24px));padding:28px}.box.wide{max-width:820px}
+body footer{background:var(--surface);color:var(--ink-soft);border-top:1px solid var(--border)}
+.brand small{font-size:12px;font-weight:500}.themeSwitch{font-size:22px;min-width:40px;padding:5px}
+.nav .links{gap:18px}.nav{height:auto;min-height:74px}.navRight{flex-shrink:0}.session .who{max-width:180px;overflow:hidden}
+.dash{max-width:1400px;margin:auto}.workspaceHeading,.sectionTitle,.calendarToolbar{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:22px}
+.workspaceHeading h2{font-size:30px;letter-spacing:-.7px;margin:6px 0}.workspaceHeading p{margin:0}
+.workspaceTabs{display:flex;gap:6px;border-bottom:1px solid var(--border);padding:0 0 14px;margin-bottom:26px;overflow-x:auto}
+.workspaceTabs button,.segmented button{border:0;background:transparent;color:var(--ink-soft);padding:11px 17px;border-radius:9px;white-space:nowrap;font-size:14px;font-weight:600}
+.workspaceTabs button.on,.segmented button.on{background:var(--green-bg);color:var(--green)}
+.kpiGrid{grid-template-columns:repeat(4,minmax(0,1fr))!important;margin-bottom:30px}.kpiValue{overflow-wrap:anywhere;font-size:clamp(22px,2.3vw,36px)!important}
+.dashCard{border:1px solid var(--border);padding:24px;border-radius:16px;margin-bottom:18px}.dashCard h3{margin:0 0 10px}.dashCard p{overflow-wrap:anywhere}
+.bookingCard .cardhead{align-items:flex-start;gap:16px;flex-wrap:wrap}.bookingCard small{font-size:11px;overflow-wrap:anywhere}.bookingMeta{display:flex;justify-content:space-between;gap:16px;margin-top:15px}.bookingMeta span{color:var(--ink-soft)}
+.actionRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.actionRow .btn{margin:0}.moneyBreakdown{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;background:var(--bg-light);padding:12px;border-radius:10px;font-size:13px}
+.statusBadge{display:inline-block;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:650;line-height:1.4;white-space:normal;background:var(--bg-light);color:var(--ink-soft)}
+.status-solicitado,.status-pendiente,.status-gestion_skilly,.status-info_solicitada,.status-revision{background:var(--amber-bg)!important;color:var(--amber)!important}
+.status-aceptado,.status-iniciado{background:#e3efff!important;color:#245486!important}.status-pagado,.status-validado,.status-confirmado,.status-completado,.status-liberado{background:var(--green-bg)!important;color:var(--green)!important}
+.status-entregado{background:#eee7ff!important;color:#654194!important}.status-cancelado,.status-rechazado,.status-expirado,.status-reembolsado{background:var(--red-bg)!important;color:var(--red)!important}
+[data-theme=dark] .status-aceptado,[data-theme=dark] .status-iniciado{background:#223950!important;color:#b0d5ff!important}[data-theme=dark] .status-entregado{background:#392b50!important;color:#ddc7ff!important}
+.serviceGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.formgrid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.reviewNote,.termsBox{background:var(--bg-light);padding:16px;border-radius:10px;font-size:14px}.inlineCheck{display:flex;align-items:center;gap:10px}.commissionSetting{border-top:1px solid var(--border);margin-top:24px;padding-top:14px}
+.calendarShell{border:1px solid var(--border);border-radius:18px;padding:24px}.calendarToolbar h2{font-size:27px;margin:4px 0;text-transform:capitalize}.calendarToolbar p{margin:0}.calendarFilters{display:flex;flex-wrap:wrap;gap:12px}.calendarFilters label{font-size:11px;margin:0}.calendarFilters select{max-width:210px;padding:8px;border-radius:8px}.segmented{display:flex;border:1px solid var(--border);border-radius:10px;padding:3px}.calendarLegend{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+.calendarWeekdays,.monthGrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}.calendarWeekdays b{padding:14px;text-align:center;font-size:12px;color:var(--ink-soft)}.monthGrid{border-left:1px solid var(--border);border-top:1px solid var(--border)}
+.calendarDay{min-height:148px;padding:8px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-width:0}.calendarDay.outside{background:var(--bg-light);opacity:.65}.dayNumber{display:block;margin:0 0 6px auto;background:transparent;border:0;color:var(--ink);width:28px;height:28px;border-radius:50%;font-weight:700}.today .dayNumber{background:#137e4c;color:white}.calendarDay.blocked{background:repeating-linear-gradient(45deg,var(--bg-light),var(--bg-light) 6px,var(--surface) 6px,var(--surface) 12px)}
+.calEvent{display:block;border:0;border-left:3px solid currentColor;border-radius:5px;padding:7px;margin-bottom:5px;width:100%;text-align:left;font-size:11px;line-height:1.4;overflow-wrap:anywhere}.calEvent b,.calEvent span,.calEvent small{display:block}.calEvent small{color:inherit!important;font-size:10px}
+.agendaGrid.week{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));min-width:1050px}.agendaGrid.day{display:grid;grid-template-columns:1fr}.agendaScroll{overflow:auto}.agendaDay{padding:12px;border:1px solid var(--border);min-height:360px}.agendaDay h3{font-size:14px;position:sticky;top:0;background:var(--surface);padding:8px}.agendaDay.today h3{color:var(--green)}.agendaEntry{margin:18px 0}.agendaEntry .calEvent{font-size:13px}.agendaEntry .hint{font-size:11px}
+html[data-app=admin] .admin{max-width:1600px;padding:32px 4%}html[data-app=admin] .adminTabs{display:none}.adminWelcome{max-width:650px;padding:50px;border:1px solid var(--border);border-radius:20px;margin:8vh auto}.adminWelcome h2{font-size:32px}.mailBody{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;font-family:inherit}
+.professionalApp .hero,.professionalApp .links a:not([data-page=dashboard]){display:none}.professionalApp .panelHead h1{font-size:30px}
+@media(max-width:1000px){.nav{padding:12px 4%;flex-wrap:wrap}.nav .links{order:3;width:100%;justify-content:center;gap:16px}.nav .navRight{margin-left:auto}.kpiGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.serviceGrid{grid-template-columns:1fr}.calendarShell{padding:16px}.monthScroll{overflow-x:auto}.calendarWeekdays,.monthGrid{min-width:700px}.adminRow{display:flex!important;flex-wrap:wrap;gap:12px}}
+@media(max-width:600px){.nav .brand{font-size:21px}.session .who{max-width:100px}.navRight{gap:0}.navRight .btn{padding:8px}.hero{grid-template-columns:1fr;padding:35px 5%}.hero h1{font-size:36px}.heroCard{margin-top:10px}.search{width:100%}.search input{min-width:0}.formgrid2,.formgrid3{grid-template-columns:1fr}.workspaceHeading h2{font-size:25px}.dashCard{padding:18px}.bookingMeta{flex-direction:column;gap:6px}.kpiGrid{gap:10px}.kpiCard{padding:15px}.workspaceTabs button{padding:10px 12px}.calendarFilters{width:100%}.calendarFilters label{flex:1;min-width:110px}.calendarFilters select{max-width:100%}.calendarShell{padding:12px}.calendarToolbar{gap:10px}.calendarToolbar h2{font-size:23px}.modal .box{padding:22px}.actionRow .btn{flex:1 1 auto}.detailGrid{grid-template-columns:1fr}html[data-app=admin] .admin{padding:24px 14px}.hero .stats{grid-template-columns:repeat(2,1fr)}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+:root[data-theme] body .btn.primary,:root[data-theme] body .btn.dark{background:#137e4c;color:#fff}
+:root[data-theme] body .btn.primary:hover,:root[data-theme] body .btn.dark:hover{background:#0d663c;color:#fff}
+:root[data-theme] .nav .links{display:flex}
+:root[data-theme] .brand small{margin-left:8px}
+#dashboard>.dash>small,#dashboard>.dash>h1{display:none}
+.workspaceTabs{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+/* Feedback must remain readable above the registration and other modal dialogs. */
+body .toast{z-index:150}
+.registrationError{padding:12px 14px;border:1px solid #b91c1c;border-radius:8px;background:#fff1f2;color:#991b1b;font-size:14px;line-height:1.5;margin:10px 0}
+#register [aria-invalid=true]{border-color:#b91c1c}
+[data-theme=dark] .registrationError{background:#3d1b21;color:#ffd8de;border-color:#e8909c}
+
+/* Public account access */
+.skilly-art-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+.authDialog {
+  width: min(880px, calc(100vw - 32px));
+  max-width: none;
+  max-height: 92dvh;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 20px 72px #06161055;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.authDialog::backdrop { background: #071710ac; backdrop-filter: blur(4px); }
+body:has(.authDialog[open]) { overflow: hidden; }
+.authCard { position: relative; min-height: 460px; isolation: isolate; }
+.authClose {
+  position: absolute; right: 12px; top: 12px; z-index: 2; border-radius: 50%;
+  width: 36px; height: 36px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--ink); font-size: 23px; line-height: 1;
+}
+.authStory {
+  position: absolute; inset: 0 auto 0 0; width: 40%; padding: 32px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  overflow: hidden; color: #f1fff6; background: linear-gradient(155deg,#07482e,#126b46 62%,#084531);
+  transition: transform .4s ease;
+}
+.authStory svg { position: absolute; inset: 8% 0 auto; width: 100%; height: 52%; color: #90edb7; opacity: .34; pointer-events: none; }
+.authBrand,.footerBrand { display: inline-flex; align-items: center; gap: 7px; font-size: 28px; font-weight: 800; letter-spacing: -1.5px; }
+.authBrand i,.footerBrand i { width: 10px; height: 10px; border-radius: 50%; background: #57df96; }
+.authBrand,.authInvite { position: relative; z-index: 1; }
+.authInvite h3 { font-size: clamp(22px,3vw,31px); line-height: 1.13; margin: 0 0 12px; }
+.authInvite p { margin: 0 0 20px; color: #dcf4e7; }
+.authInvite button { color: white; border: 1px solid #a6d3b9; border-radius: 24px; background: #ffffff10; font-weight: 650; padding: 9px 18px; }
+.authInvite button:hover { background: #ffffff22; }
+.authInvite button span { margin-left: 8px; }
+.authCard .authForms {
+  width: 60%; margin-left: 40%; padding: 56px 34px 34px; border: 0; border-radius: 0;
+  max-height: none; overflow: visible; box-shadow: none; transition: transform .4s ease;
+}
+.authDialog[data-mode=register] .authStory { transform: translateX(150%); }
+.authDialog[data-mode=register] .authForms { transform: translateX(-66.6667%); }
+.authDialog[data-mode=register] .authStory { padding-top: 52px; }
+.authDialog [hidden] { display: none; }
+.authForms .formgrid2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.authForms small { letter-spacing: .15em; color: var(--green); font-weight: 750; }
+.authForms h2 { margin: 8px 0; font-size: 30px; letter-spacing: -.8px; }
+.authIntro { color: var(--ink-soft); font-size: 14px; margin: 4px 0 20px; }
+.authTextButton { padding: 0; color: var(--green); background: transparent; border: none; text-decoration: underline; }
+.authForms .stepbar { margin: 18px 0; }
+.authForms .btn.full { margin-left: 0; }
+.authForms #regStepRole button { min-height: 68px; }
+@media(max-width: 660px) {
+  .authDialog { width: calc(100vw - 20px); max-height: 94dvh; border-radius: 18px; }
+  .authCard { min-height: 0; }
+  .authCard .authStory { position: relative; width: 100%; padding: 16px 54px 16px 20px; transform: none; }
+  .authDialog[data-mode=register] .authStory { padding-top: 16px; transform: none; }
+  .authBrand { font-size: 22px; }
+  .authStory svg { inset: 0 0 0 auto; width: 46%; height: 100%; }
+  .authInvite { display: flex; gap: 12px; align-items: center; margin-top: 7px; flex-wrap: wrap; }
+  .authInvite h3 { margin: 0; font-size: 14px; }
+  .authInvite p { display: none; }
+  .authInvite button { font-size: 13px; padding: 5px 12px; }
+  .authCard .authForms,.authDialog[data-mode=register] .authForms { width: 100%; margin: 0; padding: 22px; transform: none; }
+  .authForms .formgrid2 { grid-template-columns: 1fr; }
+}
+
+/* Public footer */
+body .publicFooter { position: relative; isolation: isolate; overflow: hidden; display: block; padding: 0; background: var(--bg-light); }
+.footerWaves { position: absolute; z-index: -1; inset: 0; width: 100%; height: 100%; color: var(--green); opacity: .11; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .footerWaves > use {
+    transform-origin: center;
+    animation: footer-wave-drift 6s ease-in-out infinite alternate;
+  }
+}
+@keyframes footer-wave-drift {
+  from { transform: translate(-7%, 3%) scaleY(.88) rotate(-2deg); }
+  to   { transform: translate(7%, -3%) scaleY(1.12) rotate(2deg); }
+}
+.footerInner { max-width: 1150px; margin: auto; text-align: center; padding: 30px 5% 16px; }
+.footerBrand { color: var(--ink); }
+.footerPages,.publicFooter .fLinks { display: flex; gap: 9px 22px; flex-wrap: wrap; justify-content: center; }
+.footerPages { margin: 12px 0 24px; }
+.publicFooter a { color: var(--ink); font-weight: 600; text-decoration: none; }
+.footerPages a { font-size: 14px; padding: 4px 0; }
+.publicFooter a:hover,.publicFooter a:focus-visible { color: var(--green); text-decoration: underline; }
+.footerBase { border-top: 1px solid var(--border); padding-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.footerBase a { font-size: 12px; font-weight: 500; color: var(--ink-soft); }
+.professionalApp .footerPages { display: none; }
+@media(max-width: 660px) { .footerBase { flex-direction: column-reverse; } }
+
+/* Administrative navigation */
+.adminRail[hidden],#railBackdrop[hidden],#railMobile[hidden],#railTip[hidden] { display: none; }
+.adminRail {
+  position: fixed; left: 8px; top: calc(var(--header-height,74px) + 8px); bottom: 8px; width: var(--rail-width,240px);
+  display: flex; flex-direction: column; z-index: 45; border: 1px solid var(--border); border-radius: 18px;
+  color: var(--ink); background: var(--surface); box-shadow: 0 5px 20px #0725170d; transition: width .2s ease;
+}
+.hasAdminRail main { margin-left: calc(var(--rail-width,240px) + 16px); transition: margin-left .2s ease; }
+.railHeader { display: flex; align-items: center; justify-content: space-between; padding: 12px 8px; gap: 4px; border-bottom: 1px solid var(--border-light); }
+.railHeader strong { padding-left: 6px; overflow: hidden; font-size: 14px; }
+#railToggle { flex: none; border: 0; color: var(--green); background: var(--green-bg); border-radius: 9px; width: 34px; height: 34px; font-size: 24px; line-height: 1; }
+#sideNav { overflow: auto; flex: 1; scrollbar-width: thin; padding: 8px 5px; }
+#sideNav button { display: flex; align-items: center; width: 100%; gap: 10px; min-height: 40px; padding: 6px 9px; border: 0; border-radius: 9px; text-align: left; background: transparent; color: var(--ink-soft); }
+#sideNav button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sideNav button i { font-style: normal; text-align: center; font-size: 18px; flex: 0 0 22px; }
+#sideNav button:hover { background: var(--bg-light); color: var(--ink); }
+#sideNav button.on { color: var(--green); background: var(--green-bg); font-weight: 700; box-shadow: inset 3px 0 var(--green); }
+#sideNav button:focus-visible { outline-offset: -3px; }
+.adminRail.compact #sideNav { scrollbar-width: none; }
+.adminRail.compact .railHeader { justify-content: center; }
+.adminRail.compact .railHeader strong,.adminRail.compact #sideNav button span { display: none; }
+#railGrip { position: absolute; top: 18px; bottom: 18px; right: -5px; width: 10px; cursor: ew-resize; touch-action: none; }
+#railGrip:hover::after,#railGrip:focus-visible::after { content: ''; position: absolute; top: 10%; bottom: 10%; left: 4px; width: 2px; background: var(--green); }
+.resizingRail { cursor: ew-resize; user-select: none; }
+.resizingRail main,.resizingRail .adminRail { transition: none; }
+#railTip { position: fixed; left: 72px; padding: 7px 10px; border-radius: 6px; background: var(--ink); color: var(--surface); pointer-events: none; font-size: 13px; }
+@media(max-width: 760px) {
+  .hasAdminRail main { margin-left: 0; }
+  .adminRail { width: min(280px,85vw); z-index: 55; transform: translateX(calc(-100% - 12px)); visibility: hidden; }
+  .adminRail.drawerOpen { transform: none; visibility: visible; }
+  #railGrip { display: none; }
+  #railBackdrop { position: fixed; inset: var(--header-height,74px) 0 0; border: 0; background: #07171088; z-index: 50; }
+  html[data-app=admin] .nav .links:empty { display: none; }
+}

@@ -1,0 +1,161 @@
+<!DOCTYPE html><html lang="es" data-app="admin"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Skilly · Administración</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/workspace.css"></head><body>
+<header class="nav"><button id="railMobile" class="btn outline" hidden aria-controls="sideRail" aria-expanded="false" onclick="toggleRail()">☰ Menú</button><a class="brand" href="#" onclick="adminNavigate('inicio')"><i></i>skilly <small>Administración</small></a><div class="links"></div><div class="navRight"><div id="guestBox"><button class="btn primary" onclick="openM('login')">Ingresar</button></div><div id="sessionBox" class="session" style="display:none"><div class="who"><b id="sessionName"></b><span id="sessionRole"></span></div><button class="btn small ghost" onclick="logout()">Salir</button></div></div></header>
+<button id="railBackdrop" hidden type="button" tabindex="-1" aria-label="Cerrar menú" onclick="toggleRail()"></button>
+<aside class="adminRail" id="sideRail" aria-label="Administración" hidden>
+  <div class="railHeader"><strong>Administración</strong><button type="button" id="railToggle" aria-controls="sideNav" onclick="toggleRail()">‹</button></div>
+  <nav id="sideNav" aria-label="Secciones de administración"></nav>
+  <div id="railGrip" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ajustar ancho del menú" aria-valuemin="56" aria-valuemax="240"></div>
+  <span id="railTip" role="tooltip" hidden></span>
+</aside>
+<main><section id="admin" class="page">
+  <div class="admin">
+    <small>PANEL DE ADMINISTRACIÓN</small><h1 style="font-size:30px;margin:8px 0">Administración Skilly</h1>
+    <p class="hint">Validación de profesionales, calendario, clientes, evaluaciones privadas, pagos y ajustes.</p>
+    <div class="adminTabs" id="adminTabsBar">
+      <button data-tab="validaciones" class="on" onclick="setAdminTab('validaciones')">Solicitudes de validación</button>
+      <button data-tab="profesionales" onclick="setAdminTab('profesionales')">Profesionales</button>
+      <button data-tab="calendario" onclick="setAdminTab('calendario')">Calendario</button>
+      <button data-tab="organizaciones" onclick="setAdminTab('organizaciones')">Organizaciones</button>
+      <button data-tab="guest" onclick="setAdminTab('guest')">Solicitudes sin registro</button>
+      <button data-tab="evaluaciones" onclick="setAdminTab('evaluaciones')">Evaluaciones (privado)</button>
+      <button data-tab="pagos" onclick="setAdminTab('pagos')">Reservas y pagos</button>
+      <button data-tab="ajustes" onclick="setAdminTab('ajustes')">Ajustes</button>
+    </div>
+    <div id="adminContent"></div>
+  </div>
+</section><section id="bigDashboard" class="page">
+  <div class="admin">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div><small>PANEL EJECUTIVO</small><h1 style="font-size:32px;margin:8px 0">Dashboard de Skilly</h1>
+      <p class="hint">Visión general de la operación: profesionales, reservas, pagos, cancelaciones y capacidad del equipo.</p></div>
+      <button class="btn outline" onclick="page('admin')">Ir a Administración →</button>
+    </div>
+    <div id="bigDashboardContent"></div>
+  </div>
+</section></main><footer>Skilly · Administración de servicios</footer><!-- ===== MODALES ===== -->
+
+<div id="login" class="modal"><div class="box">
+  <button class="close" onclick="closeM('login')">×</button>
+  <small>BIENVENIDO</small><h2>Ingresa a Skilly</h2>
+  <div class="rolesel">
+    <button data-role="organizacion" onclick="setLoginRole('organizacion')">Organización</button>
+    <button data-role="profesional" onclick="setLoginRole('profesional')">Profesional</button>
+    
+  </div>
+  <div id="loginFieldsOrgPro">
+    <label>Correo<input type="email" id="loginEmail" placeholder="tu@empresa.cl"></label>
+    <label>Contraseña<input type="password" id="accountPassword" autocomplete="current-password"></label><button class="btn ghost" onclick="openRecovery()">Recuperar acceso</button>
+  </div>
+  <div id="loginFieldsAdmin" hidden></div>
+  <button class="btn primary full" onclick="doLogin()">Ingresar</button>
+</div></div>
+
+<div id="register" class="modal"><div class="box wide">
+  <button class="close" onclick="closeM('register')">×</button>
+  <small>ÚNETE A SKILLY</small><h2>Crea tu cuenta</h2>
+  <div class="stepbar" id="regStepbar"><div class="on"></div><div></div></div>
+
+  <div id="regStepRole">
+    <p class="hint">¿Cómo quieres usar Skilly?</p>
+    <div class="rolesel">
+      <button data-role="organizacion" onclick="chooseRegRole('organizacion')">Organización</button>
+      <button data-role="profesional" onclick="chooseRegRole('profesional')">Profesional independiente</button>
+    </div>
+  </div>
+
+  <div id="regStepOrg" style="display:none">
+    <label>Nombre de la organización<input id="orgName" placeholder="Nombre o empresa"></label>
+    <label>Correo<input type="email" id="orgEmail" placeholder="correo@empresa.cl"></label><label>Contraseña (mínimo 12 caracteres)<input id="orgPassword" type="password" autocomplete="new-password" minlength="12"></label>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn outline" onclick="regBack()">Atrás</button>
+      <button class="btn primary full" onclick="submitOrgRegister()">Crear cuenta</button>
+    </div>
+  </div>
+
+  <div id="regStepProBasic" style="display:none">
+    <p class="hint">Paso 1 de 2: cuéntanos sobre tu servicio.</p>
+    <div class="formgrid2">
+      <label>Nombre completo<input id="proName" placeholder="Tu nombre"></label>
+      <label>Correo<input type="email" id="proEmail" placeholder="tu@correo.cl"></label><label>Contraseña (mínimo 12 caracteres)<input id="proPassword" type="password" autocomplete="new-password" minlength="12"></label>
+    </div>
+    <div class="formgrid2">
+      <label>Especialidad<select id="proCategory"><option>Tecnología</option><option>Marketing</option><option>Diseño</option><option>Consultoría</option></select></label>
+      <label>Modalidad<select id="proModality"><option>Remoto</option><option>Híbrido</option><option>Presencial</option></select></label>
+    </div>
+    <label>Título / rol profesional<input id="proTitle" placeholder="Ej: Diseñador UX/UI"></label>
+    <div class="formgrid2">
+      <label>Tarifa referencial<input id="proPrice" placeholder="$35.000"></label>
+      <label>Etiquetas (separadas por coma)<input id="proTags" placeholder="Figma, UX, Research"></label>
+    </div>
+    <label>Descripción breve de tus servicios<textarea id="proDesc" placeholder="¿Qué haces y para quién?"></textarea></label>
+    <label>Días en que sueles estar disponible</label>
+    <div class="checkgrid">
+      <label><input type="checkbox" class="proDay" value="Lunes" checked> Lunes</label>
+      <label><input type="checkbox" class="proDay" value="Martes"> Martes</label>
+      <label><input type="checkbox" class="proDay" value="Miércoles" checked> Miércoles</label>
+      <label><input type="checkbox" class="proDay" value="Jueves"> Jueves</label>
+      <label><input type="checkbox" class="proDay" value="Viernes" checked> Viernes</label>
+      <label><input type="checkbox" class="proDay" value="Sábado"> Sábado</label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn outline" onclick="regBack()">Atrás</button>
+      <button class="btn primary full" onclick="regProNext()">Continuar a validación</button>
+    </div>
+  </div>
+
+  <div id="regStepProValidation" style="display:none">
+    <p class="hint">Paso 2 de 2: validación de antecedentes. Un administrador de Skilly revisará esta información antes de que tu perfil sea visible para las organizaciones.</p>
+    <label>Perfil de LinkedIn (público)<input id="valLinkedin" placeholder="https://linkedin.com/in/tu-usuario"></label>
+    <div class="formgrid2">
+      <label>Años de experiencia<input id="valYears" placeholder="Ej: 5"></label>
+      <label>Certificaciones (si tienes)<input id="valCerts" placeholder="Ej: PMP, Google UX"></label>
+    </div>
+    <label>CV / antecedentes (pega un enlace o resumen)<textarea id="valCv" placeholder="Enlace a tu CV o resumen de tu trayectoria"></textarea></label>
+    <label>Referencias laborales<textarea id="valRefs" placeholder="Nombre de empresa/persona y contacto"></textarea></label>
+    <label>Portafolio (opcional)<input id="valPortfolio" placeholder="https://..."></label>
+    <label>¿Por qué quieres ofrecer tus servicios en Skilly?<textarea id="valMotivation"></textarea></label>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn outline" onclick="regBack()">Atrás</button>
+      <button class="btn primary full" onclick="submitProValidation()">Enviar a validación</button>
+    </div>
+  </div>
+
+  <div id="regStepDone" style="display:none">
+    <div class="verifiedTop" style="background:var(--green-bg)">✓ Solicitud enviada<br><small>Un administrador de Skilly revisará tus antecedentes.</small></div>
+    <p class="hint" style="margin-top:14px">Podrás ver el estado de tu validación en tu panel en cualquier momento.</p>
+    <button class="btn primary full" onclick="finishRegister()">Ir a mi panel</button>
+  </div>
+</div></div>
+
+<div id="profile" class="modal"><div class="box" id="profileBox"></div></div>
+<div id="booking" class="modal"><div class="box" id="bookingBox"></div></div>
+<div id="checkout" class="modal"><div class="box" id="checkoutBox"></div></div>
+
+<div id="guestBooking" class="modal"><div class="box" id="guestBookingBox"></div></div>
+<div id="guestDone" class="modal"><div class="box">
+  <button class="close" onclick="closeM('guestDone')">×</button>
+  <small>SOLICITUD ENVIADA</small><h2>Skilly te contactará</h2>
+  <div class="verifiedTop" style="background:var(--green-bg)">✓ Recibimos tu solicitud<br><small>Un administrador de Skilly se pondrá en contacto contigo para coordinar el servicio y el método de pago.</small></div>
+  <p class="hint" id="guestDoneEmailNote" style="margin-top:14px"></p>
+  <button class="btn primary full" onclick="closeM('guestDone');page('home')">Entendido</button>
+</div></div>
+
+<div id="evaluate" class="modal"><div class="box">
+  <button class="close" onclick="closeM('evaluate')">×</button>
+  <small>EVALUACIÓN PRIVADA</small><h2>Confirmar y evaluar</h2>
+  <p class="hint">Esta evaluación es privada: solo la ve el equipo de Skilly y se usa como argumento interno sobre el profesional, nunca como ranking público.</p>
+  <label>Puntaje</label>
+  <div class="starPick" id="starPick">
+    <span data-n="1" onclick="pickStar(1)">★</span><span data-n="2" onclick="pickStar(2)">★</span><span data-n="3" onclick="pickStar(3)">★</span><span data-n="4" onclick="pickStar(4)">★</span><span data-n="5" onclick="pickStar(5)">★</span>
+  </div>
+  <input type="hidden" id="evalStars" value="0">
+  <label>Argumento de tu evaluación<textarea id="evalComment" placeholder="¿Qué funcionó bien? ¿Qué se podría mejorar?"></textarea></label>
+  <button class="btn primary full" onclick="submitEvaluation()">Confirmar entrega y enviar evaluación</button>
+</div></div>
+
+<div id="cancelBooking" class="modal"><div class="box" id="cancelBookingBox"></div></div>
+
+<div id="chat" class="modal"><div class="box" id="chatBox"></div></div>
+
+
+<div id="workspaceModal" class="modal"><div class="box wide" id="workspaceBox"></div></div><script src="/js/app.js"></script><script src="/js/workspace.js"></script><script src="/js/policies.js"></script><script src="/js/admin-sidebar.js"></script></body></html>
