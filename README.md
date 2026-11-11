@@ -1,5 +1,7 @@
 # Skilly · Aplicaciones pública y administrativa
 
+La [carpeta de Entrega 3](docs/entrega3/README.md) contiene trazabilidad con la rúbrica, requisitos y casos de uso, modelos y scripts SQLite, seguridad, plan de pruebas, resultados y pendientes humanos. Ejecuta `npm run test:evidence` para actualizar las evidencias y `npm run db:docs` para regenerar el esquema en memoria.
+
 > Actualización: consultar [Políticas y operación](POLITICAS_IMPLEMENTADAS.md) para reclamos, cancelaciones, mediación y transferencias externas. Esta actualización sustituye las indicaciones anteriores sobre liquidación exclusivamente simulada y ausencia de reintentos de correo.
 
 La actualización conserva el diseño y las funciones anteriores de validación, reservas, chat, evaluaciones privadas, pagos y seguimiento de organizaciones. Agrega cuentas protegidas, varios servicios por profesional, comisiones configurables y espacios por rol.
@@ -20,16 +22,12 @@ Pueden utilizar skilly.cl y admin.skilly.cl mediante un proxy HTTPS. Ambos proce
 Abre el proyecto en VS Code y una terminal PowerShell:
 
 ~~~powershell
-Set-Location 'C:\Users\andre\Downloads\skilly-app'
+Set-Location 'C:\ruta\a\skilly'
 node --version
 npm --version
 ~~~
 
-Probado con **Node.js 22.23.3**. Si node/npm no se reconocen y conservas la distribución portátil de tu equipo, habilítala para esta terminal:
-
-~~~powershell
-$env:Path = 'C:\Users\andre\Downloads\node-v22.23.3-win-x64;' + $env:Path
-~~~
+Probado con **Node.js 22.23.3**. Sustituye la ruta del ejemplo por tu carpeta real y comprueba que Node.js esté disponible en la terminal.
 
 Si PowerShell bloquea npm.ps1, utiliza **npm.cmd** en los comandos siguientes. No necesitas cambiar la política de ejecución del sistema.
 
@@ -139,7 +137,7 @@ GMAIL_APP_PASSWORD=contraseña-de-aplicación
 ADMIN_NOTIFICATION_EMAIL=correo-del-equipo
 ~~~
 
-La bandeja de prueba se desactiva con NODE_ENV=production. Los fallos quedan registrados, pero no hay reintentos automáticos de correo. Corrige la configuración y solicita un nuevo enlace de recuperación o de invitado cuando sea necesario. No compartas .env ni la base de datos.
+La bandeja de prueba se desactiva con NODE_ENV=production. Los fallos quedan registrados y la cola aplica hasta cinco intentos con espera creciente. Operaciones permite revisar y reintentar los mensajes pendientes. Un enlace vencido requiere una nueva solicitud; reenviar un correo no renueva su token. No compartas .env ni la base de datos.
 
 ## 8. Pasarelas de pruebas
 

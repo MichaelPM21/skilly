@@ -11,7 +11,9 @@
     "admin:create": "node scripts/create-admin.js",
     "db:backup": "node scripts/backup.js",
     "test": "node --test tests/*.test.js",
-    "check": "node scripts/check.js"
+    "check": "node scripts/check.js",
+    "db:docs": "node scripts/export-schema.js",
+    "test:evidence": "node scripts/test-evidence.js"
   },
   "license": "UNLICENSED",
   "dependencies": {

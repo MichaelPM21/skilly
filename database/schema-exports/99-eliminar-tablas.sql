@@ -1,0 +1,25 @@
+-- SQLite: ejercicio de reconstrucción en una base desechable. NO ejecutar sobre datos de trabajo.
+PRAGMA foreign_keys=OFF;
+BEGIN;
+DROP TABLE IF EXISTS "users";
+DROP TABLE IF EXISTS "settings";
+DROP TABLE IF EXISTS "sessions";
+DROP TABLE IF EXISTS "services";
+DROP TABLE IF EXISTS "service_appeals";
+DROP TABLE IF EXISTS "schema_migrations";
+DROP TABLE IF EXISTS "refund_operations";
+DROP TABLE IF EXISTS "professionals";
+DROP TABLE IF EXISTS "payouts";
+DROP TABLE IF EXISTS "payments";
+DROP TABLE IF EXISTS "outbox";
+DROP TABLE IF EXISTS "messages";
+DROP TABLE IF EXISTS "incidents";
+DROP TABLE IF EXISTS "guest_requests";
+DROP TABLE IF EXISTS "evaluations";
+DROP TABLE IF EXISTS "case_events";
+DROP TABLE IF EXISTS "bookings";
+DROP TABLE IF EXISTS "audit_log";
+DROP TABLE IF EXISTS "attachments";
+DROP TABLE IF EXISTS "access_tokens";
+COMMIT;
+PRAGMA foreign_keys=ON;
