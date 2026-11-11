@@ -1,0 +1,22 @@
+name: Validación de Skilly
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run db:docs
+      - run: git diff --exit-code -- docs/entrega3/base-datos
+      - run: npm run test:evidence
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: resultados-de-pruebas
+          path: docs/entrega3/evidencias/
