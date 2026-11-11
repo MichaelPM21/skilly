@@ -87,7 +87,9 @@ function authRoutes(app) {
   app.patch('/api/auth/profile',wrap((req,res)=>{
     S.requireRole(req,'organizacion','profesional','admin'); const name=text(req.body.name,160);
     if(!name) S.fail(400,'Ingresa un nombre.');
-    const profile={phone:text(req.body.phone||'',40),rut:text(req.body.rut||'',40),address:text(req.body.address||'',300)};
+    let profile;
+    try { profile = require('./profile-validation').contactProfile(req.body); }
+    catch (error) { S.fail(400, error.message); }
     db.prepare('UPDATE users SET name=?,profile=? WHERE id=?').run(name,JSON.stringify(profile),req.user.id);
     if(req.user.professional_id) db.prepare('UPDATE professionals SET name=? WHERE id=?').run(name,req.user.professional_id);
     res.json(S.publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id)));

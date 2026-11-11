@@ -21,7 +21,7 @@ function bookingView(req,b) {
   return {id:b.id,professionalId:internal?b.professional_id:undefined,professionalName:internal||b.paid_at?b.professional_name:undefined,
     linkedin:b.paid_at?JSON.parse(p?.validation||'{}').linkedin:undefined,orgName:b.org_name,orgEmail:internal&&req.user?.role!=='admin'?undefined:b.org_email,
     serviceId:b.service_id,service:b.service,notes:b.notes,amount:b.amount,date:b.date,time:b.time,status:b.status,createdAt:b.created_at,
-    responseDeadline:b.response_deadline,paymentDeadline:b.payment_deadline,paidAt:b.paid_at,confirmedAt:b.confirmed_at,
+    responseDeadline:b.response_deadline,paymentDeadline:b.payment_deadline,paidAt:b.paid_at,confirmedAt:b.confirmed_at,startAt:b.start_at,endAt:b.end_at,
     durationMinutes:b.duration_minutes,prepMinutes:b.prep_minutes,followupMinutes:b.followup_minutes,
     commissionPercent:internal?b.commission_percent:undefined,commissionAmount:internal?b.commission_amount:undefined,professionalNet:internal?b.professional_net:undefined,
     refundAmount:b.refund_amount,refundPercent:b.refund_percent,refundPolicyPercent:b.refund_policy_percent,cancelReason:b.cancel_reason,cancellationStatus:b.cancellation_status,

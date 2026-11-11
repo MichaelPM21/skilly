@@ -71,6 +71,10 @@ test('Ownership, acceptance, terms, paid identity, chat and admin-mediated relea
   db.prepare('UPDATE bookings SET end_at=? WHERE id=?').run(Date.now()-1,booking);
   await success(pro.call('bookings/'+booking,'PATCH',{status:'entregado',evidence:'Sesión realizada y entregables adjuntos'}));
   await success(org.call('evaluations','POST',{bookingId:booking,stars:5,comment:'Bien realizado'}));
+  const evaluations=await success(admin.call('admin/evaluations'));
+  assert.equal(evaluations.find(e=>e.stars===5).comment,'Bien realizado');
+  for(const viewer of [pro,org,other,client(base)]) assert.equal((await viewer.call('admin/evaluations')).status,404,'Private evaluations stay outside the public application');
+  assert.ok(!JSON.stringify(await success(pro.call('bookings'))).includes('Bien realizado'));
   assert.equal(db.prepare('SELECT status FROM payments WHERE id=?').get(p.id).status,'pagado');
   await success(org.call('bookings/'+booking+'/incidents','POST',{body:'Revisar un entregable'}),201);
   assert.equal((await admin.call('admin/bookings/'+booking+'/release','POST',{})).status,409);
@@ -83,6 +87,16 @@ test('Documents are scoped and dangerous formats rejected',async()=>{
   await success(org.call('bookings/'+booking+'/attachments','POST',{name:'boleta.pdf',mime:'application/pdf',data:Buffer.from('%PDF-1.4\n test').toString('base64')}),201);
   const docs=await success(org.call('bookings/'+booking+'/attachments'));assert.equal(docs.length,1);
   assert.equal((await other.call('attachments/'+docs[0].id)).status,403);
+});
+
+test('Invalid profile contact data is rejected without partial updates',async()=>{
+  const before=await success(org.call('auth/me'));
+  assert.equal((await org.call('auth/profile','PATCH',{name:'Changed',phone:'abc',rut:''})).status,400);
+  assert.equal((await success(org.call('auth/me'))).name,before.name);
+  assert.equal((await org.call('auth/profile','PATCH',{name:before.name,rut:'12345678-9'})).status,400);
+  const updated=await success(org.call('auth/profile','PATCH',{name:before.name,phone:'+56 9 1234 5678',rut:'12.345.678-5'}));
+  assert.equal(updated.profile.rut,'12345678-5');
+  assert.equal(updated.profile.phone,'+56912345678');
 });
 test('Guest review, expiring one-use email access and identical payment flow',async()=>{
   const g=await success(client(base).call('guest-requests','POST',{serviceId:service.id,date:futureDate(8),time:'10:00',contactName:'Invitado',orgName:'Empresa Invitada',email:'guest@test.cl'}),201);guestId=g.bookingId;
@@ -274,6 +288,14 @@ test('Professional cancellation before payment does not invent retained money',a
   assert.equal(db.prepare('SELECT retained_amount FROM bookings WHERE id=?').get(b.id).retained_amount,0);
   await success(admin.call('admin/incidents/'+i.id,'PATCH',{outcome:'reembolso_total',resolution:'Cancelado sin cobro',close:true}));
 });
+test('Concurrent requests for the same slot create exactly one reservation',async()=>{
+  const date=futureDate(100);
+  const responses=await Promise.all(Array.from({length:20},()=>org.call('bookings','POST',{serviceId:service.id,date,time:'10:00'})));
+  assert.equal(responses.filter(r=>r.status===201).length,1);
+  assert.equal(responses.filter(r=>r.status===409).length,19);
+  assert.equal(db.prepare('SELECT count(*) n FROM bookings WHERE professional_id=? AND date=? AND time=?').get(proId,date,'10:00').n,1);
+});
+
 test('Late uncertain refunds can be reconciled without reviving an expired booking',async()=>{
   const b=await policyBooking();const p=db.prepare('SELECT * FROM payments WHERE booking_id=?').get(b.id);
   db.prepare("UPDATE bookings SET status='expirado',paid_at=NULL WHERE id=?").run(b.id);db.prepare("UPDATE payments SET status='revision',provider='webpay',authorization_code='LATE-AUTH' WHERE id=?").run(p.id);
