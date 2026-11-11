@@ -14,7 +14,25 @@ const Database = require('better-sqlite3');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'skilly.db');
 const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
+// Concurrent public/admin startup can return SQLITE_BUSY immediately while
+// switching journal mode, even with SQLite's default busy timeout.
+const journalDeadline = performance.now() + 5000;
+const journalWait = new Int32Array(new SharedArrayBuffer(4));
+try {
+  for (;;) {
+    try {
+      db.pragma('journal_mode = WAL');
+      break;
+    } catch (error) {
+      const remaining = journalDeadline - performance.now();
+      if (error.code !== 'SQLITE_BUSY' || remaining <= 0) throw error;
+      Atomics.wait(journalWait, 0, 0, Math.min(50, remaining));
+    }
+  }
+} catch (error) {
+  db.close();
+  throw error;
+}
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS professionals (

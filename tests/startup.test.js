@@ -32,7 +32,9 @@ test('Both processes can initialize a new shared database concurrently',async()=
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'skilly-concurrent-'));
   const env={...process.env,DB_PATH:path.join(directory,'shared.db'),SEED_DEMO:'true'};
   try{
-    await Promise.all([0,1].map(()=>run(process.execPath,['-e',"require('./server/index')"],{cwd:path.join(__dirname,'..'),env,windowsHide:true})));
+    // Wait for both children even if one fails; cleanup must not hide the original startup error.
+    const results=await Promise.allSettled([0,1].map(()=>run(process.execPath,['-e',"require('./server/index'); require('./server/db').db.close()"],{cwd:path.join(__dirname,'..'),env,windowsHide:true})));
+    for(const result of results)if(result.status==='rejected')assert.ifError(result.reason);
     const db=new Database(env.DB_PATH,{readonly:true});
     try{
       assert.equal(db.prepare('SELECT COUNT(*) n FROM professionals').get().n,4);
