@@ -72,7 +72,9 @@ body .toast{z-index:150}
 }
 .authDialog::backdrop { background: #071710ac; backdrop-filter: blur(4px); }
 body:has(.authDialog[open]) { overflow: hidden; }
-.authCard { position: relative; min-height: 460px; isolation: isolate; }
+/* Keep the backdrop still while the account panels move above it. */
+body:has(.authDialog[open]) .footerWaves > use { animation-play-state: paused; }
+.authCard { position: relative; min-height: 480px; isolation: isolate; }
 .authClose {
   position: absolute; right: 12px; top: 12px; z-index: 2; border-radius: 50%;
   width: 36px; height: 36px; border: 1px solid var(--border); background: var(--surface);
@@ -82,7 +84,8 @@ body:has(.authDialog[open]) { overflow: hidden; }
   position: absolute; inset: 0 auto 0 0; width: 40%; padding: 32px;
   display: flex; flex-direction: column; justify-content: space-between;
   overflow: hidden; color: #f1fff6; background: linear-gradient(155deg,#07482e,#126b46 62%,#084531);
-  transition: transform .4s ease;
+  z-index: 1;
+  transition: transform 240ms cubic-bezier(.22,.75,.25,1);
 }
 .authStory svg { position: absolute; inset: 8% 0 auto; width: 100%; height: 52%; color: #90edb7; opacity: .34; pointer-events: none; }
 .authBrand,.footerBrand { display: inline-flex; align-items: center; gap: 7px; font-size: 28px; font-weight: 800; letter-spacing: -1.5px; }
@@ -95,7 +98,12 @@ body:has(.authDialog[open]) { overflow: hidden; }
 .authInvite button span { margin-left: 8px; }
 .authCard .authForms {
   width: 60%; margin-left: 40%; padding: 56px 34px 34px; border: 0; border-radius: 0;
-  max-height: none; overflow: visible; box-shadow: none; transition: transform .4s ease;
+  min-height: 480px; max-height: none; overflow: visible; box-shadow: none;
+  transition: transform 240ms cubic-bezier(.22,.75,.25,1);
+}
+/* Only the two moving panels need compositor layers, while the dialog is open. */
+@media (min-width: 661px) and (prefers-reduced-motion: no-preference) {
+  .authDialog[open] .authStory,.authDialog[open] .authForms { will-change: transform; }
 }
 .authDialog[data-mode=register] .authStory { transform: translateX(150%); }
 .authDialog[data-mode=register] .authForms { transform: translateX(-66.6667%); }
@@ -120,7 +128,7 @@ body:has(.authDialog[open]) { overflow: hidden; }
   .authInvite h3 { margin: 0; font-size: 14px; }
   .authInvite p { display: none; }
   .authInvite button { font-size: 13px; padding: 5px 12px; }
-  .authCard .authForms,.authDialog[data-mode=register] .authForms { width: 100%; margin: 0; padding: 22px; transform: none; }
+  .authCard .authForms,.authDialog[data-mode=register] .authForms { width: 100%; min-height: 0; margin: 0; padding: 22px; transform: none; }
   .authForms .formgrid2 { grid-template-columns: 1fr; }
 }
 
