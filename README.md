@@ -1,6 +1,6 @@
 # Skilly · Aplicaciones pública y administrativa
 
-La [carpeta de Entrega 3](docs/entrega3/README.md) contiene trazabilidad con la rúbrica, requisitos y casos de uso, modelos y scripts SQLite, seguridad, plan de pruebas, resultados y pendientes humanos. Ejecuta `npm run test:evidence` para actualizar las evidencias y `npm run db:docs` para regenerar el esquema en memoria.
+La [carpeta de Entrega 3](docs/entrega3/README.md) contiene trazabilidad con la rúbrica, requisitos y casos de uso, modelos y scripts PostgreSQL, seguridad, plan de pruebas, resultados y pendientes humanos. Ejecuta `npm run test:evidence` para actualizar las evidencias y `npm run db:docs` para actualizar el diccionario desde los metadatos de PostgreSQL.
 
 > Actualización: consultar [Políticas y operación](POLITICAS_IMPLEMENTADAS.md) para reclamos, cancelaciones, mediación y transferencias externas. Esta actualización sustituye las indicaciones anteriores sobre liquidación exclusivamente simulada y ausencia de reintentos de correo.
 
@@ -13,9 +13,9 @@ La actualización conserva el diseño y las funciones anteriores de validación,
 | Skilly | http://localhost:3000 | Visitantes, organizaciones y profesionales | server/index.js + public/index.html |
 | Administración | http://localhost:3001 | Equipo Skilly con cuentas individuales | server/admin.js + admin/index.html |
 
-Son dos aplicaciones Express con procesos HTTP, entradas HTML y sesiones independientes. Comparten módulos de negocio, estilos y una base SQLite. El profesional utiliza el sitio principal, pero ve exclusivamente su panel y no tiene navegación de catálogo ni acciones de contratación.
+Son dos aplicaciones Express con procesos HTTP, entradas HTML y sesiones independientes. Comparten módulos de negocio, estilos y una base PostgreSQL. El profesional utiliza el sitio principal, pero ve exclusivamente su panel y no tiene navegación de catálogo ni acciones de contratación.
 
-Pueden utilizar skilly.cl y admin.skilly.cl mediante un proxy HTTPS. Ambos procesos deben ejecutarse en el mismo servidor y acceder al mismo archivo SQLite. Para alojarlos en máquinas distintas habría que cambiar la persistencia compartida. Consulta [DESPLIEGUE.md](DESPLIEGUE.md).
+Pueden utilizar skilly.cl y admin.skilly.cl mediante un proxy HTTPS. Ambos procesos usan la misma conexión DATABASE_URL; la base puede alojarse separadamente. Consulta [DESPLIEGUE.md](DESPLIEGUE.md).
 
 ## 1. Preparar Windows
 
@@ -51,30 +51,21 @@ HOST=127.0.0.1
 NODE_ENV=development
 COOKIE_SECURE=false
 TRUST_PROXY=false
-SEED_DEMO=true
+DATABASE_URL=postgresql://skilly_app:CAMBIAR@127.0.0.1:5432/skilly
+TEST_DATABASE_URL=postgresql://skilly_app:CAMBIAR@127.0.0.1:5432/skilly_test
 WEBPAY_ENV=integration
 PAYPAL_ENV=sandbox
 ~~~
 
-DB_PATH vacío utiliza **server/skilly.db**. Para una ruta personalizada, la carpeta debe existir y ambos procesos deben usar el mismo archivo.
-
-SEED_DEMO=true agrega los cuatro perfiles anteriores únicamente cuando la base no tiene profesionales. Para comenzar sin ejemplos, establece SEED_DEMO=false **antes del primer inicio o de crear el administrador**. Los perfiles de ejemplo no tienen contraseñas predeterminadas.
+Instala PostgreSQL 18 y configura un usuario exclusivo y las bases `skilly` y `skilly_test`. Sustituye CAMBIAR por la contraseña local; no publiques `.env`. Ejecuta `npm run db:migrate`. No se crean cuentas ni perfiles demo automáticamente. Consulta [la guía PostgreSQL](docs/POSTGRESQL.md).
 
 El pago simulado permite probar todo el recorrido sin correo ni pasarelas externas.
 
-## 3. Respaldar datos anteriores
+## 3. Respaldar y migrar
 
-Si ya utilizabas Skilly, ejecuta antes del primer inicio de esta actualización:
+`npm run db:backup` genera un respaldo PostgreSQL `.dump` en `.local/backups/`. Requiere `pg_dump` de la misma versión principal o posterior; `PG_BIN` permite indicar su carpeta.
 
-~~~powershell
-npm run db:backup
-~~~
-
-Guarda un respaldo consistente en **.local/backups/**, incluyendo los datos pendientes del modo WAL de SQLite. Si aún no existe una base, lo informa. No borres skilly.db para actualizar.
-
-La migración agrega tablas y columnas; conserva profesionales, reservas, pagos, mensajes, evaluaciones y configuración anterior. Crea un servicio inicial por perfil. Las reservas antiguas en estado reservado pasan a solicitud pendiente con plazo; las fechas malformadas se conservan para revisión manual.
-
-Las antiguas sesiones guardadas en el navegador no se consideran autenticación válida. La guía de uso explica cómo habilitar los perfiles existentes y vincular el historial de una organización después de verificar su correo.
+La migración local del 15-11-2026 trasladó 169 registros de 20 tablas y verificó su contenido. El archivo SQLite original y su respaldo se conservan, pero la aplicación ya no los utiliza. La importación a otra instalación solo admite un destino vacío: consulta [el procedimiento](docs/POSTGRESQL.md). Las cuentas conservan sus contraseñas existentes.
 
 ## 4. Crear el primer administrador
 
@@ -175,5 +166,5 @@ Las pruebas usan bases temporales y no modifican server/skilly.db. Cubren permis
 - **Pago bloqueado:** falta aceptación, venció el plazo o existe un intento en conciliación.
 - **Correo ausente:** usa Correos de prueba en local o revisa las credenciales y conexión del emisor.
 - **Clave administrativa anterior inválida:** crea una cuenta individual con npm run admin:create.
-- **SQLite no abre:** comprueba que DB_PATH apunte a una carpeta existente con permisos para ambos procesos.
+- **PostgreSQL no conecta:** comprueba que el servicio esté iniciado y que DATABASE_URL tenga host, puerto, base, usuario y contraseña correctos.
 

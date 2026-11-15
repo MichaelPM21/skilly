@@ -1,25 +1,2 @@
--- SQLite: ejercicio de reconstrucción en una base desechable. NO ejecutar sobre datos de trabajo.
-PRAGMA foreign_keys=OFF;
-BEGIN;
-DROP TABLE IF EXISTS "users";
-DROP TABLE IF EXISTS "settings";
-DROP TABLE IF EXISTS "sessions";
-DROP TABLE IF EXISTS "services";
-DROP TABLE IF EXISTS "service_appeals";
-DROP TABLE IF EXISTS "schema_migrations";
-DROP TABLE IF EXISTS "refund_operations";
-DROP TABLE IF EXISTS "professionals";
-DROP TABLE IF EXISTS "payouts";
-DROP TABLE IF EXISTS "payments";
-DROP TABLE IF EXISTS "outbox";
-DROP TABLE IF EXISTS "messages";
-DROP TABLE IF EXISTS "incidents";
-DROP TABLE IF EXISTS "guest_requests";
-DROP TABLE IF EXISTS "evaluations";
-DROP TABLE IF EXISTS "case_events";
-DROP TABLE IF EXISTS "bookings";
-DROP TABLE IF EXISTS "audit_log";
-DROP TABLE IF EXISTS "attachments";
-DROP TABLE IF EXISTS "access_tokens";
-COMMIT;
-PRAGMA foreign_keys=ON;
+-- PostgreSQL. Scripts académicos para una base DESECHABLE; no ejecutar DROP sobre la base de trabajo.
+DROP TABLE access_tokens, attachments, audit_log, bookings, case_events, evaluations, guest_requests, incidents, messages, outbox, payments, payouts, professionals, refund_operations, schema_migrations, service_appeals, services, sessions, settings, users CASCADE;

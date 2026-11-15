@@ -1,53 +1,37 @@
-// Reproduce the application schema in memory. Never read the working database.
-const fs = require('node:fs');
-const path = require('node:path');
-process.env.DB_PATH = ':memory:';
-const {db} = require('../server/db');
-require('../server/schema').migrate();
-const output = path.join(__dirname, '..', 'docs', 'entrega3', 'base-datos');
-fs.mkdirSync(output, {recursive:true});
-const tables = db.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
-const indexes = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL ORDER BY name").all().map(x=>x.sql+';').join('\n');
-const quote = name => '"'+name.replaceAll('"','""')+'"';
-const withoutFK = sql => sql.replace(/,\s*FOREIGN KEY\s*\([^)]+\)\s*REFERENCES\s+\w+\s*\([^)]+\)/gi,'')
-  .replace(/\s+REFERENCES\s+\w+\s*\([^)]+\)/gi,'');
-const withoutPK = sql => sql.replace(/\s+PRIMARY KEY(?:\s+AUTOINCREMENT)?/gi,'');
-const warning = '-- SQLite: ejercicio de reconstrucción en una base desechable. NO ejecutar sobre datos de trabajo.\n';
-const write = (name, content) => fs.writeFileSync(path.join(output,name),content,'utf8');
-function rebuild(transform) {
-  return warning+'PRAGMA foreign_keys=OFF;\nBEGIN;\n'+tables.map(t=>{
-    const columns=db.prepare('PRAGMA table_info('+quote(t.name)+')').all().map(c=>quote(c.name)).join(',');
-    const temporary='e3_rebuild_'+t.name;
-    const sql=transform(t.sql).replace(/^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(?:"[^"]+"|\w+)/i,'CREATE TABLE '+quote(temporary));
-    return sql+';\nINSERT INTO '+quote(temporary)+' ('+columns+') SELECT '+columns+' FROM '+quote(t.name)+';\nDROP TABLE '+quote(t.name)+';\nALTER TABLE '+quote(temporary)+' RENAME TO '+quote(t.name)+';';
-  }).join('\n\n')+'\nCOMMIT;\nPRAGMA foreign_keys=ON;\n';
+// Read PostgreSQL metadata; never export application rows or credentials.
+require('dotenv').config();
+const fs=require('node:fs'),path=require('node:path');
+const {db}=require('../server/db');
+async function exportSchema(){
+ const out=path.join(__dirname,'../docs/entrega3/base-datos');fs.mkdirSync(out,{recursive:true});
+ const sql=fs.readFileSync(path.join(__dirname,'../database/postgres/001-initial.sql'),'utf8');
+ const statements=sql.replace(/^--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean);
+ const warning='-- PostgreSQL. Scripts académicos para una base DESECHABLE; no ejecutar DROP sobre la base de trabajo.\n';
+ const write=(file,content)=>fs.writeFileSync(path.join(out,file),content,'utf8');
+ const tables=(await db.query("SELECT tablename FROM pg_tables WHERE schemaname=current_schema() ORDER BY tablename")).rows.map(r=>r.tablename);
+ const constraints=(await db.query("SELECT c.conname,c.contype,c.conrelid::regclass::text AS table_name,pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c WHERE c.connamespace=current_schema()::regnamespace ORDER BY c.conrelid::regclass::text,c.conname")).rows;
+ const fks=(await db.query("SELECT tc.table_name,kcu.column_name,ccu.table_name AS referenced_table,ccu.column_name AS referenced_column FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name=kcu.constraint_name AND tc.constraint_schema=kcu.constraint_schema JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name=ccu.constraint_name AND tc.constraint_schema=ccu.constraint_schema WHERE tc.constraint_type='FOREIGN KEY' AND tc.constraint_schema=current_schema() ORDER BY tc.table_name,kcu.column_name")).rows;
+ write('esquema-completo.sql',warning+sql);
+ write('01-tablas.sql',warning+statements.filter(s=>s.startsWith('CREATE TABLE')).map(s=>s.replace(/ PRIMARY KEY/g,'')+';').join('\n\n')+'\n');
+ write('02-claves-primarias.sql',warning+constraints.filter(c=>c.contype==='p').map(c=>`ALTER TABLE ${c.table_name} ADD CONSTRAINT ${c.conname} ${c.definition};`).join('\n')+'\n');
+ write('03-claves-foraneas.sql',warning+statements.filter(s=>s.startsWith('ALTER TABLE')).join(';\n')+';\n');
+ write('04-indices.sql',warning+statements.filter(s=>/^CREATE (UNIQUE )?INDEX/.test(s)).join(';\n')+';\n');
+ write('90-eliminar-claves-foraneas.sql',warning+constraints.filter(c=>c.contype==='f').map(c=>`ALTER TABLE ${c.table_name} DROP CONSTRAINT ${c.conname};`).join('\n')+'\n');
+ write('99-eliminar-tablas.sql',warning+'DROP TABLE '+tables.join(', ')+' CASCADE;\n');
+ let dict='# Diccionario físico — PostgreSQL\n\nGenerado por `npm run db:docs` desde metadatos PostgreSQL. Fechas BIGINT: milisegundos Unix; fechas de agenda TEXT: AAAA-MM-DD; hora TEXT: HH:mm (America/Santiago). Importes de reserva: CLP enteros. JSON se conserva como TEXT para mantener los contratos existentes. Adjuntos: BYTEA.\n';
+ let diagram='# Modelo físico — PostgreSQL\n\n```mermaid\nerDiagram\n';
+ for(const table of tables){
+  const cols=(await db.query('SELECT column_name,udt_name,is_nullable,column_default,is_identity FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1 ORDER BY ordinal_position',[table])).rows;
+  const pk=constraints.find(c=>c.table_name===table&&c.contype==='p')?.definition||'';
+  dict+='\n## '+table+'\n\n| Campo | Tipo | Admite NULL | Predeterminado | Clave |\n|---|---|---|---|---|\n';
+  diagram+='  '+table+' {\n';
+  for(const c of cols){const fk=fks.find(f=>f.table_name===table&&f.column_name===c.column_name);const key=pk.includes('('+c.column_name+')')?'PK':fk?'FK':'';dict+='| '+[c.column_name,c.udt_name,c.is_nullable==='YES'?'Sí':'No',c.is_identity==='YES'?'IDENTITY':c.column_default||'—',key+(fk?' → '+fk.referenced_table+'.'+fk.referenced_column:'')].join(' | ')+' |\n';if(key)diagram+='    '+c.udt_name+' '+c.column_name+' '+key+'\n';}
+  diagram+='  }\n';
+  const indexes=(await db.query('SELECT indexdef FROM pg_indexes WHERE schemaname=current_schema() AND tablename=$1 ORDER BY indexname',[table])).rows;
+  dict+='\nÍndices:\n\n'+indexes.map(r=>'- `'+r.indexdef.replace(/ ON [a-z0-9_]+\./,' ON ')+'`').join('\n')+'\n';
+ }
+ for(const f of fks)diagram+='  '+f.referenced_table+' ||--o{ '+f.table_name+' : "'+f.column_name+'"\n';
+ write('diccionario.md',dict);write('modelo-fisico.md',diagram+'```\n\n'+tables.length+' tablas; '+fks.length+' claves foráneas declaradas. Las FK opcionales se detallan en el diccionario.\n');
+ console.log(tables.length+' tablas y '+fks.length+' relaciones PostgreSQL documentadas.');
 }
-write('01-tablas.sql',warning+'BEGIN;\n'+tables.map(t=>withoutPK(withoutFK(t.sql))+';').join('\n\n')+'\nCOMMIT;\n');
-write('02-claves-primarias.sql',rebuild(withoutFK));
-write('03-claves-foraneas.sql',rebuild(sql=>sql));
-write('04-indices.sql',warning+indexes+'\n');
-write('90-eliminar-claves-foraneas.sql',rebuild(withoutFK)+indexes+'\n');
-write('99-eliminar-tablas.sql',warning+'PRAGMA foreign_keys=OFF;\nBEGIN;\n'+[...tables].reverse().map(t=>'DROP TABLE IF EXISTS '+quote(t.name)+';').join('\n')+'\nCOMMIT;\nPRAGMA foreign_keys=ON;\n');
-write('esquema-completo.sql',warning+'PRAGMA foreign_keys=ON;\nBEGIN;\n'+tables.map(t=>t.sql+';').join('\n\n')+'\n'+indexes+"\nINSERT INTO settings(id,admin_weekly_review_capacity,default_cancellation_refund_percent) VALUES(1,3,80);\nCOMMIT;\n");
-const descriptions={professionals:'Perfil, antecedentes y agenda compartida del profesional.',users:'Cuenta y credenciales. Una organización se representa por una cuenta de este rol.',sessions:'Sesiones por aplicación y acceso acotado de invitado.',access_tokens:'Tokens de un uso para verificación, recuperación e invitados.',services:'Borrador y versión publicada del servicio.',bookings:'Reserva y copia de precio, comisión y condiciones al contratar.',payments:'Operación de pago y referencias del proveedor.',guest_requests:'Solicitud sin registro y su conversión a reserva.',evaluations:'Estrellas y argumentos privados para administración.',messages:'Mensajes de la reserva.',settings:'Configuración global, fila id=1.',incidents:'Reclamos, decisión y plazos.',attachments:'Documentos de la reserva en BLOB.',audit_log:'Trazabilidad de acciones.',outbox:'Cola de correo y reintentos.',schema_migrations:'Versiones de migraciones aplicadas.',case_events:'Eventos de incidencias y mediaciones (relación polimórfica).',service_appeals:'Mediación de una revisión de servicio.',refund_operations:'Intentos y conciliación de devoluciones.',payouts:'Transferencias externas y evidencia.'};
-let dictionary='# Diccionario físico de datos\n\nGenerado desde `server/db.js` y `server/schema.js` sobre una base en memoria con `npm run db:docs`. No contiene datos personales.\n\nFechas `INTEGER`: milisegundos Unix; `date`: AAAA-MM-DD; `time`: HH:mm de America/Santiago. Importes de reserva en CLP enteros; montos esperados de proveedor pueden usar otra moneda. JSON se conserva como TEXT y requiere validación de aplicación. PK en SQLite no implica siempre NOT NULL explícito para TEXT; se informa cada restricción por separado.\n';
-let physical='# Modelo físico implementado\n\nLas líneas representan únicamente claves foráneas declaradas, no todas las asociaciones de negocio.\n\n```mermaid\nerDiagram\n';
-let fkCount=0;
-for(const t of tables){
-  const cols=db.prepare('PRAGMA table_info('+quote(t.name)+')').all();
-  const fks=db.prepare('PRAGMA foreign_key_list('+quote(t.name)+')').all();fkCount+=fks.length;
-  dictionary+='\n## '+t.name+'\n\n'+(descriptions[t.name]||'')+'\n\n| Campo | Tipo | NOT NULL | PK | Predeterminado | FK declarada |\n|---|---|---|---|---|---|\n';
-  for(const c of cols)dictionary+='| '+[c.name,c.type,c.notnull?'Sí':'No',c.pk||'—',String(c.dflt_value??'—').replaceAll('|','\\|'),fks.filter(f=>f.from===c.name).map(f=>f.table+'.'+f.to).join(', ')||'—'].join(' | ')+' |\n';
-  dictionary+='\nÍndices:\n\n';
-  for(const i of db.prepare('PRAGMA index_list('+quote(t.name)+')').all()){
-    const fields=db.prepare('PRAGMA index_info('+quote(i.name)+')').all().map(c=>c.name).join(', ');
-    dictionary+='- `'+i.name+'` ('+fields+'): '+(i.unique?'único':'no único')+(i.partial?', parcial':'')+'.\n';
-  }
-  if(!db.prepare('PRAGMA index_list('+quote(t.name)+')').all().length)dictionary+='- Sin índice adicional.\n';
-  physical+='  '+t.name+' {\n'+cols.filter(c=>c.pk||fks.some(f=>f.from===c.name)).map(c=>'    '+c.type+' '+c.name+(c.pk?' PK':' FK')).join('\n')+'\n  }\n';
-  for(const f of fks)physical+='  '+f.table+' ||--o{ '+t.name+' : "'+f.from+'"\n';
-}
-write('diccionario.md',dictionary);
-write('modelo-fisico.md',physical+'```\n\n'+tables.length+' tablas; '+fkCount+' referencias FK declaradas. Las asociaciones sin FK se describen en el modelo lógico y no deben presentarse como restricciones existentes.\n');
-db.close();
-console.log('Esquema, scripts separados, diccionario y modelo físico exportados: '+tables.length+' tablas, '+fkCount+' FK.');
+exportSchema().catch(e=>{console.error(e.message);process.exitCode=1;}).finally(()=>db.close());

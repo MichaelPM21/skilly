@@ -7,12 +7,12 @@ Esta guía describe la arquitectura entregada. No se han publicado dominios ni c
 ```text
 https://skilly.cl       → proxy HTTPS → 127.0.0.1:3000 → aplicación pública
 https://admin.skilly.cl → proxy HTTPS → 127.0.0.1:3001 → aplicación administrativa
-                                              ambas → mismo archivo SQLite
+                                              ambas → misma base PostgreSQL
 ```
 
-Ejecuta `npm run start:public` y `npm run start:admin` con un supervisor de procesos. Ambos comparten DB_PATH, configuración de pasarelas y correo. Sirve exclusivamente sus puertos HTTP mediante el proxy; no publiques la carpeta del proyecto.
+Ejecuta `npm run start:public` y `npm run start:admin` con un supervisor de procesos. Ambos comparten DATABASE_URL, configuración de pasarelas y correo. Sirve exclusivamente sus puertos HTTP mediante el proxy; no publiques la carpeta del proyecto.
 
-SQLite utiliza WAL y transacciones para coordinar operaciones concurrentes. Usa un disco local persistente con permisos para ambos procesos. Para varias máquinas o réplicas, debe migrarse la persistencia a una base de datos de servidor.
+PostgreSQL conserva la persistencia compartida. Las transacciones críticas usan un bloqueo asesor para mantener las reglas de negocio entre ambos servidores. Configura TLS si la base está fuera del equipo y limita el acceso a los servidores de aplicación.
 
 ## Configuración HTTPS
 
@@ -22,10 +22,9 @@ ADMIN_PORT=3001
 HOST=127.0.0.1
 BASE_URL=https://skilly.cl
 ADMIN_URL=https://admin.skilly.cl
-DB_PATH=/ruta/persistente/skilly.db
+DATABASE_URL=postgresql://skilly_app:CAMBIAR@servidor:5432/skilly
 COOKIE_SECURE=true
 TRUST_PROXY=true
-SEED_DEMO=false
 NODE_ENV=production
 WEBPAY_ENV=integration
 PAYPAL_ENV=sandbox
@@ -44,7 +43,7 @@ NODE_ENV=production desactiva el pago simulado y la bandeja de correos de prueba
 5. Configura correo y prueba verificación, invitaciones, recuperación y acceso de invitados.
 6. Completa pruebas contra Webpay integración y PayPal sandbox con las credenciales correspondientes.
 
-Para restaurar, detén **ambos** procesos y conserva la base actual y sus archivos -wal/-shm. Copia el respaldo a una **ruta nueva**, configura ese archivo como DB_PATH en ambos procesos y vuelve a iniciar. Esto evita mezclar el respaldo con archivos WAL de otra base. Conserva el original hasta verificar la restauración.
+Para restaurar, detén ambos procesos y restaura el `.dump` con `pg_restore --exit-on-error --single-transaction --no-owner` sobre una base nueva y vacía. Configura DATABASE_URL para esa base, comprueba los datos y vuelve a iniciar. Conserva la base anterior hasta validar la restauración. Ver [PostgreSQL](docs/POSTGRESQL.md).
 
 ## Alcance de esta entrega
 
