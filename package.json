@@ -1,7 +1,7 @@
 {
   "name": "skilly-prototipo",
   "version": "2.0.0",
-  "description": "Prototipo funcional de Skilly: marketplace de profesionales independientes, con validación, agendamiento, pago retenido y evaluaciones privadas.",
+  "description": "Skilly con PostgreSQL: servicios profesionales, reservas, pagos retenidos y evaluaciones privadas.",
   "main": "server/index.js",
   "scripts": {
     "start": "node scripts/start.js",
@@ -13,7 +13,9 @@
     "test": "node --test tests/*.test.js",
     "check": "node scripts/check.js",
     "db:docs": "node scripts/export-schema.js",
-    "test:evidence": "node scripts/test-evidence.js"
+    "test:evidence": "node scripts/test-evidence.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:import:sqlite": "node scripts/import-sqlite.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
@@ -22,6 +24,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "nodemailer": "^10.0.10",
+    "pg": "^8.23.1",
     "transbank-sdk": "^6.1.1"
   }
 }
