@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Aislamiento PostgreSQL de pruebas: exige TEST_DATABASE_URL terminada en
+ * _test, crea un esquema aleatorio, configura PGSCHEMA y desactiva Gmail. setup prepara el
+ * esquema y cleanup lo elimina al terminar.
+ */
+
 const fs=require('node:fs');
 const crypto=require('node:crypto');
 const {Client}=require('pg');
@@ -12,6 +18,14 @@ process.env.DATABASE_URL=testUrl;
 process.env.PGSCHEMA=schema;
 process.env.NODE_ENV='test';
 process.env.GMAIL_USER='';process.env.GMAIL_APP_PASSWORD='';
+/**
+ * Crea un esquema aleatorio exclusivo de esta suite en TEST_DATABASE_URL y aplica la migración
+ * dentro de él. El módulo exige una base cuyo nombre termine en _test y desactiva Gmail.
+ */
 async function setup(){const client=new Client({connectionString:testUrl});await client.connect();try{await client.query('CREATE SCHEMA '+schema);}finally{await client.end();}await require('../server/schema').migrate();}
+/**
+ * Cierra el pool de la suite y elimina con CASCADE únicamente su esquema temporal. Debe
+ * ejecutarse después de cerrar servidores y consultas que usen ese esquema.
+ */
 async function cleanup(){await require('../server/db').db.close();const client=new Client({connectionString:testUrl});await client.connect();try{await client.query('DROP SCHEMA '+schema+' CASCADE');}finally{await client.end();}}
 module.exports={setup,cleanup,schema,testUrl};

@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Servicios independientes del perfil. draft guarda la propuesta editable y
+ * published la última aprobada; una revisión usa el hash del borrador. Las comisiones pueden ser
+ * particulares o heredar settings y quedan congeladas al reservar.
+ */
+
 const {
   db,
   getSettings
@@ -10,22 +16,35 @@ const {
 } = require('./accounts');
 const schedule = require('./scheduling');
 const notify = require('./notifications');
+/**
+ * Convierte el valor a número y exige un entero dentro del intervalo inclusivo. Lanza 400 usando
+ * la etiqueta del campo para explicar el error.
+ */
 function integer(v, min, max, label) {
   const n = Number(v);
   if (!Number.isInteger(n) || n < min || n > max) S.fail(400, `${label}: valor inválido.`);
   return n;
 }
+/**
+ * Convierte y valida un porcentaje finito entre 0 y 100, inclusive. Permite decimales; la
+ * columna de destino determina cómo se almacena.
+ */
 function percent(v) {
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0 || n > 100) S.fail(400, 'El porcentaje debe estar entre 0 y 100.');
   return n;
 }
+/**
+ * Normaliza título, descripción, precio CLP, etiquetas y duración del servicio. Valida rangos y
+ * exige que atención, preparación y seguimiento sumen como máximo un día; devuelve el objeto
+ * apto para guardar como borrador.
+ */
 function validateService(b) {
   const title = text(b.title, 180),
     description = text(b.description || '', 5000);
   if (!title || !description) S.fail(400, 'Completa título y descripción.');
   const price = integer(typeof b.price === 'string' ? b.price.replace(/[^0-9]/g, '') : b.price, 1, 100000000, 'Precio');
-  const tags = Array.isArray(b.tags) ? b.tags.map(t => text(t, 50)).slice(0, 20) : [];
+  const tags = Array.isArray(b.tags) ? b.tags.map(/* Transforma cada elemento con text(t, 50) para construir la colección utilizada por esta operación. */ t => text(t, 50)).slice(0, 20) : [];
   const result = {
     title,
     description,
@@ -40,6 +59,10 @@ function validateService(b) {
   if (result.durationMinutes + result.prepMinutes + result.followupMinutes > 1440) S.fail(400, 'La dedicación total debe caber en un día.');
   return result;
 }
+/**
+ * Convierte una fila de professionals al contrato camelCase de los paneles privados. Deserializa
+ * antecedentes y disponibilidad e incluye revisión, capacidad, bloqueos y suspensión.
+ */
 function professional(p) {
   return {
     bookingSuspended: !!p.booking_suspended,
@@ -72,6 +95,11 @@ function professional(p) {
     reviewedAt: p.reviewed_at
   };
 }
+/**
+ * Construye la representación pública publicada o la privada del borrador. La vista privada
+ * agrega propietario, observaciones, hash de revisión y comisión efectiva; la pública no agrega
+ * nombre ni antecedentes del profesional.
+ */
 async function serviceView(s, privateView = false) {
   const p = await db.prepare('SELECT * FROM professionals WHERE id=?').get(s.professional_id);
   const value = JSON.parse((privateView ? s.draft : s.published) || '{}');
@@ -94,15 +122,29 @@ async function serviceView(s, privateView = false) {
   });
   return result;
 }
+/**
+ * Registra catálogo, borradores, disponibilidad, revisión de servicios, perfiles y
+ * configuración. Selecciona datos por rol y conserva la versión publicada hasta que Skilly
+ * aprueba la nueva revisión.
+ */
 function servicesRoutes(app) {
+  /**
+   * GET /api/services. Selecciona borradores propios para profesionales, todos para administración
+   * o publicaciones con perfil validado para visitantes/clientes. serviceView limita los campos
+   * según la vista.
+   */
   app.get('/api/services', wrap(async (req, res) => {
     let rows;
     if (req.user?.role === 'profesional') rows = await db.prepare('SELECT * FROM services WHERE professional_id=? ORDER BY created_at DESC').all(req.user.professional_id);else if (req.user?.role === 'admin') {
       S.admin(req);
       rows = await db.prepare('SELECT * FROM services ORDER BY created_at DESC').all();
     } else rows = await db.prepare(`SELECT s.* FROM services s JOIN professionals p ON p.id=s.professional_id WHERE s.published IS NOT NULL AND p.status='validado' ORDER BY s.created_at DESC`).all();
-    res.json(await Promise.all(rows.map(async s => await serviceView(s, ['admin', 'profesional'].includes(req.user?.role)))));
+    res.json(await Promise.all(rows.map(/* Obtiene y transforma cada registro de forma asíncrona; el llamador reúne los resultados con Promise.all. */ async s => await serviceView(s, ['admin', 'profesional'].includes(req.user?.role)))));
   }));
+  /**
+   * POST /api/services. Exige profesional, valida los datos y crea un servicio propio pendiente de
+   * revisión. Devuelve su representación privada.
+   */
   app.post('/api/services', wrap(async (req, res) => {
     S.requireRole(req, 'profesional');
     const value = validateService(req.body),
@@ -110,6 +152,11 @@ function servicesRoutes(app) {
     await db.prepare(`INSERT INTO services(id,professional_id,draft,status,created_at,updated_at) VALUES(?,?,?,'pendiente',?,?)`).run(id, req.user.professional_id, JSON.stringify(value), Date.now(), Date.now());
     res.status(201).json(await serviceView(await db.prepare('SELECT * FROM services WHERE id=?').get(id), true));
   }));
+  /**
+   * PATCH /api/services/:id. Exige propiedad y ausencia de mediación abierta; fusiona cambios con
+   * el borrador, valida y lo deja pendiente. Conserva la publicación anterior hasta una nueva
+   * aprobación.
+   */
   app.patch('/api/services/:id', wrap(async (req, res) => {
     S.requireRole(req, 'profesional');
     const s = await db.prepare('SELECT * FROM services WHERE id=? AND professional_id=?').get(req.params.id, req.user.professional_id);
@@ -123,10 +170,17 @@ function servicesRoutes(app) {
     await db.prepare(`UPDATE services SET draft=?,status='pendiente',updated_at=? WHERE id=?`).run(JSON.stringify(value), Date.now(), s.id);
     res.json(await serviceView(await db.prepare('SELECT * FROM services WHERE id=?').get(s.id), true));
   }));
+  /**
+   * PATCH /api/admin/services/:id. Permite cambiar comisión y revisar una versión concreta
+   * mediante su hash. Exige observaciones para rechazar o pedir información, bloquea mediaciones
+   * abiertas y requiere perfil validado para publicar; audita y notifica.
+   */
   app.patch('/api/admin/services/:id', wrap(async (req, res) => {
     S.admin(req);
     let notification;
     const serviceId = await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const s = await db.prepare('SELECT * FROM services WHERE id=?').get(req.params.id);
       if (!s) S.fail(404, 'Servicio no encontrado.');
       if (req.body.commissionPercent !== undefined) await db.prepare('UPDATE services SET commission_percent=? WHERE id=?').run(req.body.commissionPercent === null ? null : percent(req.body.commissionPercent), s.id);
@@ -150,6 +204,11 @@ function servicesRoutes(app) {
     if (notification) await notify.send(notification.email, 'Revisión de tu servicio en Skilly', notification.body);
     res.json(await serviceView(await db.prepare('SELECT * FROM services WHERE id=?').get(serviceId), true));
   }));
+  /**
+   * GET /api/services/:id/availability. Valida publicación, perfil y fecha, prueba cada hora
+   * ofrecida y devuelve las que no generan conflicto. Un profesional solo puede consultar su
+   * propia agenda.
+   */
   app.get('/api/services/:id/availability', wrap(async (req, res) => {
     const s = await db.prepare('SELECT * FROM services WHERE id=? AND published IS NOT NULL').get(req.params.id);
     if (!s) S.fail(404, 'Servicio no disponible.');
@@ -175,6 +234,10 @@ function servicesRoutes(app) {
       timeZone: 'America/Santiago'
     });
   }));
+  /**
+   * GET /api/professionals. Devuelve todos los perfiles a administración, el propio al profesional
+   * o un arreglo vacío a visitantes y clientes. Evita exponer antecedentes en el catálogo.
+   */
   app.get('/api/professionals', wrap(async (req, res) => {
     if (req.user?.role === 'admin') {
       S.admin(req);
@@ -183,6 +246,11 @@ function servicesRoutes(app) {
     if (req.user?.role === 'profesional') return res.json((await db.prepare('SELECT * FROM professionals WHERE id=?').all(req.user.professional_id)).map(professional));
     res.json([]);
   }));
+  /**
+   * Actualiza disponibilidad, jornada, capacidad y antecedentes del perfil autorizado. El modo
+   * administrativo permite además revisar, recomendar y asignar responsable; reenviar antecedentes
+   * vuelve el perfil a pendiente y la revisión administrativa puede notificar por correo.
+   */
   async function updateProfessional(req, res, adminMode) {
     if (adminMode) S.admin(req);else S.requireRole(req, 'profesional');
     if (!adminMode && req.params.id !== req.user.professional_id) S.fail(403, 'Solo puedes editar tu perfil.');
@@ -194,7 +262,7 @@ function servicesRoutes(app) {
     if (b.availability !== undefined) patch.availability = JSON.stringify(schedule.validateAvailability(b.availability));
     if (b.blockedDates !== undefined) {
       if (!Array.isArray(b.blockedDates) || b.blockedDates.length > 730) S.fail(400, 'Fechas bloqueadas inválidas.');
-      b.blockedDates.forEach(d => schedule.timestamp(d, '12:00'));
+      b.blockedDates.forEach(/* Valida cada fecha bloqueada mediante la conversión de calendario antes de guardarla. */ d => schedule.timestamp(d, '12:00'));
       patch.blocked_dates = JSON.stringify([...new Set(b.blockedDates)]);
     }
     for (const [key, col] of [['workStart', 'work_start'], ['workEnd', 'work_end']]) if (b[key] !== undefined) {
@@ -220,7 +288,7 @@ function servicesRoutes(app) {
       if (b.recommended !== undefined) patch.recommended = b.recommended ? 1 : 0;
       if (b.assignedTo !== undefined) patch.assigned_to = text(b.assignedTo, 160);
     }
-    if (Object.keys(patch).length) await db.prepare(`UPDATE professionals SET ${Object.keys(patch).map(k => k + '=?').join(',')} WHERE id=?`).run(...Object.values(patch), p.id);
+    if (Object.keys(patch).length) await db.prepare(`UPDATE professionals SET ${Object.keys(patch).map(/* Transforma cada elemento con k + '=?' para construir la colección utilizada por esta operación. */ k => k + '=?').join(',')} WHERE id=?`).run(...Object.values(patch), p.id);
     let sent = false;
     if (adminMode && b.status) {
       sent = await notify.send(p.email, 'Validación de antecedentes en Skilly', `Estado: ${b.status}\n${b.adminNotes || ''}`);
@@ -231,19 +299,35 @@ function servicesRoutes(app) {
       notificationEmailSent: sent
     });
   }
+  /**
+   * PATCH /api/professionals/:id/self. Delega en updateProfessional en modo propietario para
+   * editar agenda y antecedentes del profesional autenticado.
+   */
   app.patch('/api/professionals/:id/self', wrap(async (req, res) => await updateProfessional(req, res, false)));
+  /**
+   * PATCH /api/professionals/:id. Delega en updateProfessional en modo administrativo para revisar
+   * perfiles, capacidad, recomendación y asignación.
+   */
   app.patch('/api/professionals/:id', wrap(async (req, res) => await updateProfessional(req, res, true)));
+  /**
+   * GET /api/admin/settings. Exige administración y devuelve la única fila de configuración
+   * operativa.
+   */
   app.get('/api/admin/settings', wrap(async (req, res) => {
     S.admin(req);
     res.json(await getSettings());
   }));
+  /**
+   * PATCH /api/admin/settings. Valida porcentajes y límites del parche, actualiza exclusivamente
+   * campos permitidos y audita el cambio. Las reservas ya creadas conservan sus condiciones.
+   */
   app.patch('/api/admin/settings', wrap(async (req, res) => {
     S.admin(req);
     const b = req.body,
       patch = {};
     for (const [key, col] of [['commissionPercent', 'commission_percent'], ['defaultCancellationRefundPercent', 'default_cancellation_refund_percent']]) if (b[key] !== undefined) patch[col] = percent(b[key]);
     for (const [key, col] of [['responseHours', 'response_hours'], ['paymentHours', 'payment_hours'], ['adminWeeklyReviewCapacity', 'admin_weekly_review_capacity']]) if (b[key] !== undefined) patch[col] = integer(b[key], 1, 720, key);
-    if (Object.keys(patch).length) await db.prepare(`UPDATE settings SET ${Object.keys(patch).map(k => k + '=?').join(',')} WHERE id=1`).run(...Object.values(patch));
+    if (Object.keys(patch).length) await db.prepare(`UPDATE settings SET ${Object.keys(patch).map(/* Transforma cada elemento con k + '=?' para construir la colección utilizada por esta operación. */ k => k + '=?').join(',')} WHERE id=1`).run(...Object.values(patch));
     await S.audit(req, 'settings', 'global', JSON.stringify(patch));
     res.json(await getSettings());
   }));

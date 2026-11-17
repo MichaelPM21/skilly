@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Pruebas HTTP de flujo con aplicaciones locales, clientes de cookies
+ * separadas y esquema PostgreSQL temporal. Los casos comparten datos creados en secuencia y
+ * sustituyen pasarelas/SMTP por dobles controlados; no ejecutan cobros ni correos reales.
+ */
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -17,9 +23,17 @@ const {
 const S = require('../server/security');
 const schedule = require('../server/scheduling');
 let publicApp, adminApp, publicServer, adminServer, base, adminBase, admin, pro, org, other, service, proId, booking, guestId, guest;
+/**
+ * Construye un cliente HTTP de pruebas con cookie independiente para simular un usuario.
+ * Devuelve call y un lector de cookie, sin utilizar el navegador ni una cuenta de producción.
+ */
 function client(url) {
   let cookie = '';
   return {
+    /**
+     * Envía una solicitud local con JSON, cabecera CSRF y cookie del cliente. Captura Set-Cookie y
+     * devuelve estado, cuerpo y cabeceras sin seguir redirecciones, para comprobar retornos de pago.
+     */
     async call(route, method = 'GET', body) {
       const r = await fetch(url + '/api/' + route, {
         method,
@@ -47,16 +61,28 @@ function client(url) {
         headers: r.headers
       };
     },
+    /**
+     * Devuelve la cookie capturada por este cliente de pruebas para comprobar el aislamiento de
+     * sesiones.
+     */
     get cookie() {
       return cookie;
     }
   };
 }
+/**
+ * Espera una respuesta del cliente, exige el estado HTTP indicado y devuelve su cuerpo. La
+ * aserción incluye el JSON recibido para diagnosticar fallos.
+ */
 const success = async (p, status = 200) => {
   const r = await p;
   assert.equal(r.status, status, JSON.stringify(r.data));
   return r.data;
 };
+/**
+ * Construye una fecha AAAA-MM-DD desplazando días UTC respecto de hoy. Se usa para reservar
+ * horarios relativos sin depender de una fecha fija ya vencida.
+ */
 function futureDate(offset = 5) {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + offset);
@@ -64,6 +90,10 @@ function futureDate(offset = 5) {
 }
 const password = 'Skilly-pruebas-2026!';
 let policyOffset = 35;
+/**
+ * Crea una reserva de prueba en una fecha nueva, la acepta como profesional y la paga de forma
+ * simulada. Devuelve la respuesta inicial para los escenarios de políticas.
+ */
 async function policyBooking() {
   const b = await success(org.call('bookings', 'POST', {
     serviceId: service.id,
@@ -79,6 +109,10 @@ async function policyBooking() {
   }), 201);
   return b;
 }
+/**
+ * Prepara el esquema y los datos de prueba antes de ejecutar los casos; las aplicaciones HTTP
+ * usan puertos locales y las credenciales de la suite.
+ */
 before(async () => {
   await pgTest.setup();
   const hash = await S.passwordHash(password);
@@ -87,7 +121,7 @@ before(async () => {
   adminApp = createApp('admin');
   publicServer = publicApp.listen(0, '127.0.0.1');
   adminServer = adminApp.listen(0, '127.0.0.1');
-  await Promise.all([new Promise(r => publicServer.once('listening', r)), new Promise(r => adminServer.once('listening', r))]);
+  await Promise.all([new Promise(/* Resuelve cuando el servidor de prueba emite listening, antes de enviar solicitudes HTTP. */ r => publicServer.once('listening', r)), new Promise(/* Resuelve cuando el servidor de prueba emite listening, antes de enviar solicitudes HTTP. */ r => adminServer.once('listening', r))]);
   base = 'http://127.0.0.1:' + publicServer.address().port;
   adminBase = 'http://127.0.0.1:' + adminServer.address().port;
   admin = client(adminBase);
@@ -96,10 +130,19 @@ before(async () => {
   other = client(base);
   guest = client(base);
 });
+/**
+ * Libera servidores, conexiones y recursos temporales al finalizar la suite, incluso si una
+ * aserción falló.
+ */
 after(async () => {
-  await Promise.all([publicServer,adminServer].filter(Boolean).map(server=>new Promise(r=>server.close(r))));
+  await Promise.all([publicServer,adminServer].filter(Boolean).map(/* Convierte cada operación asíncrona en una promesa para esperar conjuntamente su finalización. */ server=>new Promise(/* Resuelve cuando termina el cierre del servidor para poder eliminar después el esquema de pruebas. */ r=>server.close(r))));
   await pgTest.cleanup();
 });
+/**
+ * Verifica separación de aplicaciones, contraseña real y rechazo de solicitudes sin cabecera
+ * CSRF o con origen ajeno. También comprueba cookie administrativa y ausencia de catálogo en su
+ * HTML.
+ */
 test('Separate applications, CSRF and real password authentication', async () => {
   assert.equal((await client(base).call('auth/login', 'POST', {
     email: 'admin@test.cl',
@@ -140,6 +183,10 @@ test('Separate applications, CSRF and real password authentication', async () =>
   assert.ok(!doc.includes('<section id="market"'));
   assert.ok(!doc.includes('<section id="home"'));
 });
+/**
+ * Registra usuarios y verifica que aprobar antecedentes no publique automáticamente el servicio.
+ * Comprueba catálogo sin identidad privada y rechazo de modificaciones de perfiles ajenos.
+ */
 test('Registration, independent service review and no public identity leak', async () => {
   const u = await success(pro.call('auth/register', 'POST', {
     name: 'Profesional Secreto',
@@ -199,6 +246,10 @@ test('Registration, independent service review and no public identity leak', asy
   })).status, 401);
   assert.equal((await other.call('professionals/' + proId + '/self', 'PATCH', {})).status, 403);
 });
+/**
+ * Verifica precio autoritativo, solapamiento entre servicios, revisión nueva al editar y rechazo
+ * de aprobación obsoleta. Comprueba que comisión y monto de reservas anteriores no cambien.
+ */
 test('Reserve, overlap across services, reapproval and immutable financial snapshot', async () => {
   const b = await success(org.call('bookings', 'POST', {
     serviceId: service.id,
@@ -237,7 +288,7 @@ test('Reserve, overlap across services, reapproval and immutable financial snaps
     title: 'Servicio actualizado',
     price: 150000
   }));
-  assert.equal((await success(client(base).call('services'))).find(s => s.id === service.id).price, 100000);
+  assert.equal((await success(client(base).call('services'))).find(/* Busca el primer elemento según la condición s.id === service.id. Se evalúan los datos ya cargados. */ s => s.id === service.id).price, 100000);
   assert.equal((await admin.call('admin/services/' + service.id, 'PATCH', {
     status: 'validado',
     revision: service.revision,
@@ -262,6 +313,11 @@ test('Reserve, overlap across services, reapproval and immutable financial snaps
   }), 201);
   assert.equal((await db.prepare('SELECT commission_percent FROM bookings WHERE id=?').get(future.id)).commission_percent, 20);
 });
+/**
+ * Recorre acceso, aceptación, consentimiento, pago, identidad, chat, entrega, evaluación y
+ * liberación simulada. Comprueba que un reclamo pendiente bloquee liquidar y que las
+ * evaluaciones sigan privadas.
+ */
 test('Ownership, acceptance, terms, paid identity, chat and admin-mediated release', async () => {
   assert.equal((await other.call('bookings/' + booking + '/messages')).status, 403);
   assert.equal((await other.call('bookings/' + booking, 'PATCH', {
@@ -279,7 +335,7 @@ test('Ownership, acceptance, terms, paid identity, chat and admin-mediated relea
     acceptTerms: true
   }), 201);
   assert.equal(p.amount, 100000);
-  const paid = (await success(org.call('bookings'))).find(b => b.id === booking);
+  const paid = (await success(org.call('bookings'))).find(/* Busca el primer elemento según la condición b.id === booking. Se evalúan los datos ya cargados. */ b => b.id === booking);
   assert.equal(paid.professionalName, 'Profesional Secreto');
   assert.equal(paid.linkedin, 'https://www.linkedin.com/in/test');
   assert.equal((await org.call('payments', 'POST', {
@@ -309,7 +365,7 @@ test('Ownership, acceptance, terms, paid identity, chat and admin-mediated relea
     comment: 'Bien realizado'
   }));
   const evaluations = await success(admin.call('admin/evaluations'));
-  assert.equal(evaluations.find(e => e.stars === 5).comment, 'Bien realizado');
+  assert.equal(evaluations.find(/* Busca el primer elemento según la condición e.stars === 5. Se evalúan los datos ya cargados. */ e => e.stars === 5).comment, 'Bien realizado');
   for (const viewer of [pro, org, other, client(base)]) assert.equal((await viewer.call('admin/evaluations')).status, 404, 'Private evaluations stay outside the public application');
   assert.ok(!JSON.stringify(await success(pro.call('bookings'))).includes('Bien realizado'));
   assert.equal((await db.prepare('SELECT status FROM payments WHERE id=?').get(p.id)).status, 'pagado');
@@ -324,6 +380,10 @@ test('Ownership, acceptance, terms, paid identity, chat and admin-mediated relea
   await success(admin.call('admin/bookings/' + booking + '/release', 'POST', {}));
   assert.equal((await db.prepare('SELECT status FROM payments WHERE id=?').get(p.id)).status, 'liberado');
 });
+/**
+ * Comprueba que los adjuntos pertenezcan a una reserva autorizada y que formatos peligrosos se
+ * rechacen. Usa un PDF de prueba y verifica que un tercero no pueda descargarlo.
+ */
 test('Documents are scoped and dangerous formats rejected', async () => {
   assert.equal((await other.call('bookings/' + booking + '/attachments')).status, 403);
   assert.equal((await org.call('bookings/' + booking + '/attachments', 'POST', {
@@ -340,6 +400,10 @@ test('Documents are scoped and dangerous formats rejected', async () => {
   assert.equal(docs.length, 1);
   assert.equal((await other.call('attachments/' + docs[0].id)).status, 403);
 });
+/**
+ * Verifica que datos de contacto inválidos no guarden parcialmente el nombre y que teléfono y
+ * RUT válidos queden normalizados.
+ */
 test('Invalid profile contact data is rejected without partial updates', async () => {
   const before = await success(org.call('auth/me'));
   assert.equal((await org.call('auth/profile', 'PATCH', {
@@ -360,6 +424,10 @@ test('Invalid profile contact data is rejected without partial updates', async (
   assert.equal(updated.profile.rut, '12345678-5');
   assert.equal(updated.profile.phone, '+56912345678');
 });
+/**
+ * Prueba reserva invitada gestionada por Skilly, token de un uso y acceso limitado. Exige
+ * tramitación y aceptación profesional antes de pagar y revelar identidad.
+ */
 test('Guest review, expiring one-use email access and identical payment flow', async () => {
   const g = await success(client(base).call('guest-requests', 'POST', {
     serviceId: service.id,
@@ -394,6 +462,10 @@ test('Guest review, expiring one-use email access and identical payment flow', a
   const b = (await success(guest.call('bookings')))[0];
   assert.equal(b.professionalName, 'Profesional Secreto');
 });
+/**
+ * Comprueba bloqueo de fechas y liberación de cupos al vencer o rechazarse solicitudes,
+ * consultando de nuevo la disponibilidad del servicio.
+ */
 test('Blocked dates, expiration and rejection release capacity', async () => {
   const date = futureDate(10);
   await success(pro.call('professionals/' + proId + '/self', 'PATCH', {
@@ -426,6 +498,10 @@ test('Blocked dates, expiration and rejection release capacity', async () => {
   }));
   assert.ok((await success(client(base).call('services/' + service.id + '/availability?date=' + futureDate(11)))).slots.includes('10:00'));
 });
+/**
+ * Comprueba conversión de horas de Chile en verano e invierno y rechazo de porcentajes, plazos o
+ * jornadas inválidos.
+ */
 test('Calendar timezone and settings validation', async () => {
   const winter = schedule.timestamp('2027-07-15', '10:00'),
     summer = schedule.timestamp('2027-01-15', '10:00');
@@ -442,6 +518,10 @@ test('Calendar timezone and settings validation', async () => {
     workEnd: '09:00'
   })).status, 400);
 });
+/**
+ * Usa el correo de prueba para restablecer una contraseña y verifica revocación de sesiones y
+ * rechazo de reutilizar el token.
+ */
 test('Password reset invalidates sessions and cannot be replayed', async () => {
   await success(other.call('auth/forgot', 'POST', {
     email: 'other@test.cl'
@@ -458,6 +538,10 @@ test('Password reset invalidates sessions and cannot be replayed', async () => {
     password
   })).status, 400);
 });
+/**
+ * Inyecta pasarelas ficticias y verifica intentos concurrentes, retornos repetidos, montos
+ * adulterados, cobros tardíos y devoluciones. No valida una operación contra servicios externos.
+ */
 test('Payment provider confirmation, duplicate callbacks, tampering, late charges and refunds', async () => {
   const orders = new Map();
   let sequence = 0,
@@ -466,6 +550,10 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
     refunds = 0;
   const fake = {
     webpay: {
+      /**
+       * Simula la creación Webpay: genera token y orden, guarda una autorización controlada en memoria
+       * y devuelve una URL de prueba. No contacta a Transbank.
+       */
       async createTransaction({
         bookingId,
         amount
@@ -488,13 +576,25 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
           buyOrder
         };
       },
+      /**
+       * Cuenta confirmaciones Webpay simuladas y devuelve la respuesta guardada para el token. Permite
+       * demostrar que un retorno repetido no vuelve a confirmar.
+       */
       async commitTransaction(token) {
         commits++;
         return orders.get(token);
       },
+      /**
+       * Devuelve el estado Webpay preparado en memoria para probar conciliación sin conexión al
+       * proveedor.
+       */
       async statusTransaction(token) {
         return orders.get(token);
       },
+      /**
+       * Incrementa el contador de devoluciones simuladas y devuelve un resultado Webpay exitoso.
+       * Permite detectar llamadas duplicadas.
+       */
       async refundTransaction() {
         refunds++;
         return {
@@ -504,7 +604,15 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       }
     },
     paypal: {
+      /**
+       * Devuelve true para habilitar el adaptador PayPal simulado del escenario sin credenciales
+       * externas.
+       */
       isConfigured: () => true,
+      /**
+       * Crea una orden PayPal ficticia con importe convertido y captura completada en memoria.
+       * Devuelve datos controlados para probar verificación de reserva, moneda y monto.
+       */
       async createOrder({
         bookingId,
         amountClp
@@ -534,13 +642,24 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
           usdAmount
         };
       },
+      /**
+       * Cuenta capturas PayPal simuladas y devuelve la orden guardada, permitiendo verificar
+       * idempotencia del retorno.
+       */
       async captureOrder(id) {
         captures++;
         return orders.get(id);
       },
+      /**
+       * Devuelve una orden PayPal de la memoria de pruebas para el flujo de conciliación.
+       */
       async getOrder(id) {
         return orders.get(id);
       },
+      /**
+       * Cuenta devoluciones PayPal simuladas y devuelve un id y estado COMPLETED sin enviar
+       * solicitudes externas.
+       */
       async refundCapture() {
         refunds++;
         return {
@@ -552,6 +671,10 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
   };
   publicApp.locals.providers = fake;
   adminApp.locals.providers = fake;
+  /**
+   * Crea y acepta una reserva de prueba desplazada por offset días. Deja el pago pendiente para
+   * probar creación, retornos y reembolsos de pasarelas.
+   */
   async function accepted(offset) {
     const b = await success(org.call('bookings', 'POST', {
       serviceId: service.id,
@@ -571,8 +694,8 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
     bookingId: b.id,
     acceptTerms: true
   })]);
-  assert.deepEqual(concurrent.map(r => r.status).sort(), [200, 409]);
-  const p = concurrent.find(r => r.status === 200).data;
+  assert.deepEqual(concurrent.map(/* Extrae r.status de cada elemento para formar la lista que necesita esta operación. */ r => r.status).sort(), [200, 409]);
+  const p = concurrent.find(/* Busca el primer elemento según la condición r.status === 200. Se evalúan los datos ya cargados. */ r => r.status === 200).data;
   let result = await client(base).call('payments/webpay/commit?token_ws=' + p.token);
   assert.match(result.headers.get('location'), /payment=success/);
   result = await client(base).call('payments/webpay/commit?token_ws=' + p.token);
@@ -621,6 +744,10 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
   }));
   assert.equal(refunds, 3);
 });
+/**
+ * Prueba enlaces LinkedIn inválidos sin crear cuentas parciales, luego corrige el dato y
+ * verifica un único registro pendiente y rechazo de duplicados.
+ */
 test('Professional registration explains invalid LinkedIn and allows correction without partial accounts', async () => {
   const candidate = client(base),
     body = {
@@ -668,6 +795,10 @@ test('Professional registration explains invalid LinkedIn and allows correction 
   assert.equal(duplicate.status, 409);
   assert.match(duplicate.data.error, /correo/);
 });
+/**
+ * Comprueba los tramos temprano y tardío de devolución y la inmutabilidad de políticas
+ * congeladas, incluidos contratos anteriores sin policy_snapshot.
+ */
 test('Policy snapshots, early refund, late refund and immutable legacy terms', async () => {
   const P = require('../server/policies'),
     b = await policyBooking();
@@ -685,6 +816,10 @@ test('Policy snapshots, early refund, late refund and immutable legacy terms', a
     defaultCancellationRefundPercent: 80
   }));
 });
+/**
+ * Recorre inasistencia: tolerancia, reclamo, respuesta, decisión, devolución total, cierre y
+ * apelación. Verifica que el incumplimiento confirmado no acepte un porcentaje menor al 100%.
+ */
 test('No show: tolerance, ownership, decision, full refund, close and appeal', async () => {
   const b = await policyBooking();
   assert.equal((await org.call('bookings/' + b.id + '/incidents', 'POST', {
@@ -740,6 +875,11 @@ test('No show: tolerance, ownership, decision, full refund, close and appeal', a
   }));
   assert.equal((await db.prepare('SELECT status FROM incidents WHERE id=?').get(i.id)).status, 'abierta');
 });
+/**
+ * Verifica evidencia de entrega, bloqueo de cancelación directa, confirmación sin evaluación y
+ * conformidad posterior a una corrección antes de liquidar. Permite reclamar después de
+ * liquidación dentro del flujo previsto.
+ */
 test('Delivered services cannot be cancelled by customer; confirmation is independent from evaluation', async () => {
   const b = await policyBooking();
   await db.prepare('UPDATE bookings SET end_at=? WHERE id=?').run(Date.now() - 1, b.id);
@@ -782,6 +922,11 @@ test('Delivered services cannot be cancelled by customer; confirmation is indepe
     body: 'Problema detectado después de liquidación'
   }), 201);
 });
+/**
+ * Recorre observación de servicio, mediación, contacto, propuestas, rechazo y aceptación.
+ * Comprueba que editar esté bloqueado durante la mediación y que aceptar no publique
+ * automáticamente.
+ */
 test('Service mediation records disagreement, contact, proposal and explicit consent', async () => {
   const s = await success(pro.call('services', 'POST', {
     title: 'Servicio a negociar',
@@ -827,11 +972,19 @@ test('Service mediation records disagreement, contact, proposal and explicit con
   assert.equal((await db.prepare('SELECT status FROM service_appeals WHERE id=?').get(a.id)).status, 'acordada');
   assert.equal((await db.prepare('SELECT published FROM services WHERE id=?').get(s.id)).published, null);
 });
+/**
+ * Simula una devolución incierta, comprueba que no se repita y exige evidencia para conciliarla.
+ * Rechaza volver a confirmar una operación ya cerrada.
+ */
 test('Uncertain refunds require evidence and never automatically repeat the provider request', async () => {
   const b = await policyBooking();
   await db.prepare("UPDATE payments SET provider='webpay',provider_token='uncertain' WHERE booking_id=?").run(b.id);
   let calls = 0;
   const prior = publicApp.locals.providers.webpay.refundTransaction;
+  /**
+   * Simula un timeout de devolución y cuenta cuántas veces se intentó. El escenario verifica que
+   * la incertidumbre bloquee un segundo envío al proveedor.
+   */
   publicApp.locals.providers.webpay.refundTransaction = async () => {
     calls++;
     throw new Error('timeout');
@@ -863,6 +1016,11 @@ test('Uncertain refunds require evidence and never automatically repeat the prov
     publicApp.locals.providers.webpay.refundTransaction = prior;
   }
 });
+/**
+ * Verifica que una orden externa exija pago no simulado, confirmación, importe exacto y
+ * comprobante de la reserva. El proveedor es controlado por la prueba; no se realiza una
+ * transferencia bancaria.
+ */
 test('External payout requires real payment, exact amount and booking-scoped evidence', async () => {
   const b = await policyBooking();
   await db.prepare("UPDATE bookings SET status='confirmado',confirmed_at=? WHERE id=?").run(Date.now(), b.id);
@@ -895,6 +1053,10 @@ test('External payout requires real payment, exact amount and booking-scoped evi
     evidenceId: doc.id
   })).status, 409);
 });
+/**
+ * Comprueba que dos barridos creen un único caso de abandono y que un correo fallido se recupere
+ * con reintento, sin duplicar envíos SMTP concurrentes.
+ */
 test('Follow-up detects abandonment once; SMTP retry recovers without duplicate concurrent delivery', async () => {
   const b = await policyBooking();
   await db.prepare('UPDATE bookings SET end_at=? WHERE id=?').run(Date.now() - 48 * 3600000, b.id);
@@ -906,21 +1068,33 @@ test('Follow-up detects abandonment once; SMTP retry recovers without duplicate 
   const id = await n.enqueue('retry@example.test', 'Retry test', 'Body');
   let calls = 0;
   assert.equal(await n.deliver(id, {
+    /**
+     * Simula un transporte SMTP sin conexión lanzando un error. Permite verificar que deliver
+     * conserve el mensaje para reintento.
+     */
     sendMail: async () => {
       throw new Error('offline');
     }
   }), false);
   await db.prepare('UPDATE outbox SET next_attempt_at=0 WHERE id=?').run(id);
   const transport = {
+    /**
+     * Simula un envío SMTP exitoso con una demora breve y cuenta las invocaciones. Dos llamadas
+     * concurrentes deben adquirir un único bloqueo de entrega.
+     */
     sendMail: async () => {
       calls++;
-      await new Promise(r => setTimeout(r, 20));
+      await new Promise(/* Introduce una demora controlada en el doble de prueba para ejercitar concurrencia y bloqueo de envío. */ r => setTimeout(r, 20));
     }
   };
   await Promise.all([n.deliver(id, transport), n.deliver(id, transport)]);
   assert.equal(calls, 1);
   assert.equal((await db.prepare('SELECT sent FROM outbox WHERE id=?').get(id)).sent, 1);
 });
+/**
+ * Verifica que una suspensión impida nuevas reservas pero conserve el acceso del profesional a
+ * las existentes, y que administración pueda levantarla con fundamento.
+ */
 test('Suspension blocks new reservations without hiding existing claims', async () => {
   await success(admin.call('admin/professionals/' + proId + '/suspension', 'POST', {
     suspended: true,
@@ -937,6 +1111,10 @@ test('Suspension blocks new reservations without hiding existing claims', async 
     reason: 'Caso revisado; habilitación aprobada'
   }));
 });
+/**
+ * Recorre cancelación profesional antes de pago y verifica bloqueo del cobro, devolución cero y
+ * ausencia de dinero retenido ficticio.
+ */
 test('Professional cancellation before payment does not invent retained money', async () => {
   const b = await success(org.call('bookings', 'POST', {
     serviceId: service.id,
@@ -970,19 +1148,27 @@ test('Professional cancellation before payment does not invent retained money', 
     close: true
   }));
 });
+/**
+ * Envía veinte solicitudes simultáneas para un mismo horario y exige una sola reserva creada y
+ * diecinueve conflictos. Comprueba el resultado persistido.
+ */
 test('Concurrent requests for the same slot create exactly one reservation', async () => {
   const date = futureDate(100);
   const responses = await Promise.all(Array.from({
     length: 20
-  }, () => org.call('bookings', 'POST', {
+  }, /* Genera otra solicitud simultánea al mismo horario para comprobar exclusión de reservas concurrentes. */ () => org.call('bookings', 'POST', {
     serviceId: service.id,
     date,
     time: '10:00'
   })));
-  assert.equal(responses.filter(r => r.status === 201).length, 1);
-  assert.equal(responses.filter(r => r.status === 409).length, 19);
+  assert.equal(responses.filter(/* Conserva los elementos según la condición r.status === 201. Se evalúan los datos ya cargados. */ r => r.status === 201).length, 1);
+  assert.equal(responses.filter(/* Conserva los elementos según la condición r.status === 409. Se evalúan los datos ya cargados. */ r => r.status === 409).length, 19);
   assert.equal((await db.prepare('SELECT count(*) n FROM bookings WHERE professional_id=? AND date=? AND time=?').get(proId, date, '10:00')).n, 1);
 });
+/**
+ * Simula una devolución tardía incierta y su conciliación administrativa. Verifica que el pago
+ * quede reembolsado y la reserva continúe expirada.
+ */
 test('Late uncertain refunds can be reconciled without reviving an expired booking', async () => {
   const b = await policyBooking();
   const p = await db.prepare('SELECT * FROM payments WHERE booking_id=?').get(b.id);
@@ -990,6 +1176,10 @@ test('Late uncertain refunds can be reconciled without reviving an expired booki
   await db.prepare("UPDATE payments SET status='revision',provider='webpay',authorization_code='LATE-AUTH' WHERE id=?").run(p.id);
   const provider = adminApp.locals.providers.webpay,
     prior = provider.refundTransaction;
+  /**
+   * Simula una devolución tardía de resultado incierto. La prueba verifica la conciliación externa
+   * sin reactivar la reserva expirada.
+   */
   provider.refundTransaction = async () => {
     throw new Error('uncertain');
   };

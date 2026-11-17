@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Ciclo principal: gestion_skilly (invitado) → solicitado → aceptado → pagado
+ * → entregado → confirmado → completado. Este módulo crea solicitudes y gestiona agenda,
+ * entrega, chat y documentos; pagos y políticas completan las otras transiciones.
+ */
+
 const {
   db,
   getSettings
@@ -14,6 +20,11 @@ const {
 } = require('./services');
 const schedule = require('./scheduling');
 const notify = require('./notifications');
+/**
+ * Carga una reserva y verifica que pertenezca a la organización, al profesional o a la sesión
+ * invitada, o que se acceda como administrador. Devuelve la fila interna; lanza 404, 401 o 403
+ * según el caso.
+ */
 async function access(req, id) {
   const b = await db.prepare('SELECT * FROM bookings WHERE id=?').get(id);
   if (!b) S.fail(404, 'Reserva no encontrada.');
@@ -28,10 +39,19 @@ async function access(req, id) {
   if (u.role === 'invitado' && u.guestBookingId === b.id) return b;
   S.fail(403, 'No puedes acceder a esta reserva.');
 }
+/**
+ * Comprueba acceso a la reserva y exige rol organización o invitado. Se usa para acciones que
+ * corresponden a quien contrata, como pagar o confirmar una entrega.
+ */
 async function customer(req, b) {
   await access(req, b.id);
   S.requireRole(req, 'organizacion', 'invitado');
 }
+/**
+ * Proyecta la reserva para la API según el rol y paid_at. Oculta identidad antes del pago a
+ * clientes, limita datos financieros internos y agrega política congelada y devolución vigente;
+ * no altera el contrato almacenado.
+ */
 async function bookingView(req, b) {
   const internal = ['admin', 'profesional'].includes(req.user?.role);
   const p = await db.prepare('SELECT validation FROM professionals WHERE id=?').get(b.professional_id);
@@ -75,6 +95,11 @@ async function bookingView(req, b) {
     serviceSnapshot: JSON.parse(b.service_snapshot || '{}')
   };
 }
+/**
+ * Consulta únicamente las reservas visibles para la sesión. Administración recibe todas,
+ * profesional y organización las propias, invitado una sola; sin sesión devuelve un arreglo
+ * vacío.
+ */
 async function listBookings(req) {
   if (!req.user) return [];
   if (req.user.role === 'admin') {
@@ -85,6 +110,11 @@ async function listBookings(req) {
   if (req.user.role === 'organizacion') return await db.prepare('SELECT * FROM bookings WHERE org_user_id=? ORDER BY created_at DESC').all(req.user.id);
   return await db.prepare('SELECT * FROM bookings WHERE id=?').all(req.user.guestBookingId);
 }
+/**
+ * Valida publicación, perfil y agenda; toma precio y comisión desde el servidor y guarda una
+ * copia del servicio y política. Crea solicitado o gestion_skilly con plazo limitado por el
+ * inicio reservado; el llamador la ejecuta dentro de una transacción para evitar solapamientos.
+ */
 async function createBooking(req, guest) {
   const b = req.body,
     s = await db.prepare('SELECT * FROM services WHERE id=? AND published IS NOT NULL').get(b.serviceId || b.professionalId);
@@ -136,17 +166,36 @@ async function createBooking(req, guest) {
   await db.prepare('UPDATE bookings SET policy_snapshot=? WHERE id=?').run(JSON.stringify(require('./policies').snapshot(settings)), id);
   return await db.prepare('SELECT * FROM bookings WHERE id=?').get(id);
 }
+/**
+ * Registra creación y consulta de reservas, gestión de invitados, cambios de estado,
+ * evaluaciones, chat y documentos. Los accesos se validan en servidor y la entrega profesional
+ * exige fin del intervalo y descripción de evidencia.
+ */
 function bookingsRoutes(app) {
+  /**
+   * GET /api/bookings. Expira plazos vencidos y responde las reservas autorizadas mediante
+   * bookingView. Aunque es GET, la limpieza de vencimientos puede actualizar registros.
+   */
   app.get('/api/bookings', wrap(async (req, res) => {
     await schedule.expire();
-    res.json(await Promise.all((await listBookings(req)).map(async b => await bookingView(req, b))));
+    res.json(await Promise.all((await listBookings(req)).map(/* Obtiene y transforma cada registro de forma asíncrona; el llamador reúne los resultados con Promise.all. */ async b => await bookingView(req, b))));
   }));
+  /**
+   * POST /api/bookings. Exige organización y crea la solicitud dentro de una transacción para
+   * proteger disponibilidad. Notifica al profesional después de guardar y responde la reserva sin
+   * identidad previa al pago.
+   */
   app.post('/api/bookings', wrap(async (req, res) => {
     S.requireRole(req, 'organizacion');
-    const b = await db.transaction(async () => await createBooking(req, false)).immediate();
+    const b = await db.transaction(/* Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT. */ async () => await createBooking(req, false)).immediate();
     await notify.send(b.professional_email, 'Nueva solicitud de servicio', `${b.service}: ${b.date} ${b.time}. Revisa tu panel para aceptar o rechazar.`);
     res.status(201).json(await bookingView(req, b));
   }));
+  /**
+   * POST /api/guest-requests. Valida contacto, limita intentos y guarda reserva gestion_skilly y
+   * solicitud invitada juntas. Envía acceso seguro al cliente y aviso a Skilly; no acepta ni paga
+   * la reserva.
+   */
   app.post('/api/guest-requests', wrap(async (req, res) => {
     if (req.user && req.user.role !== 'invitado') S.fail(403, 'Solicita desde tu cuenta de organización.');
     S.rateLimit(req, 'guest-request', 10);
@@ -155,6 +204,8 @@ function bookingsRoutes(app) {
     let b,
       gid = S.id('guest');
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       b = await createBooking(req, true);
       await db.prepare(`INSERT INTO guest_requests(id,professional_id,professional_name,contact_name,org_name,email,phone,date,time,notes,status,booking_id,service_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,'nueva',?,?,?)`).run(gid, b.professional_id, b.professional_name, contact, b.org_name, b.org_email, text(req.body.phone || '', 40), b.date, b.time, b.notes, b.id, b.service_id, Date.now());
     }).immediate();
@@ -167,10 +218,14 @@ function bookingsRoutes(app) {
       emailSent: sent
     });
   }));
+  /**
+   * GET /api/admin/guest-requests. Expira solicitudes vencidas y devuelve los datos de gestión y
+   * contacto de invitados a administración.
+   */
   app.get('/api/admin/guest-requests', wrap(async (req, res) => {
     S.admin(req);
     await schedule.expire();
-    res.json((await db.prepare('SELECT * FROM guest_requests ORDER BY created_at DESC').all()).map(g => ({
+    res.json((await db.prepare('SELECT * FROM guest_requests ORDER BY created_at DESC').all()).map(/* Transforma cada registro en la estructura requerida por GET /api/admin/guest-requests, conservando su posición en el arreglo resultante. */ g => ({
       id: g.id,
       professionalName: g.professional_name,
       contactName: g.contact_name,
@@ -188,6 +243,11 @@ function bookingsRoutes(app) {
       createdAt: g.created_at
     })));
   }));
+  /**
+   * PATCH /api/admin/guest-requests/:id. Guarda contacto o descarte, observaciones y responsable.
+   * Solo descarta directamente una reserva aún en gestion_skilly; los casos tramitados deben usar
+   * cancelación.
+   */
   app.patch('/api/admin/guest-requests/:id', wrap(async (req, res) => {
     S.admin(req);
     const g = await db.prepare('SELECT * FROM guest_requests WHERE id=?').get(req.params.id);
@@ -196,6 +256,8 @@ function bookingsRoutes(app) {
     const b = g.booking_id && (await db.prepare('SELECT * FROM bookings WHERE id=?').get(g.booking_id));
     if (req.body.status === 'descartada' && b && b.status !== 'gestion_skilly') S.fail(409, 'Gestiona la cancelación desde la reserva vinculada.');
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       await db.prepare('UPDATE guest_requests SET status=?,admin_notes=?,assigned_to=?,handled_at=? WHERE id=?').run(req.body.status, text(req.body.adminNotes || '', 2000), text(req.body.assignedTo || '', 160), Date.now(), g.id);
       if (req.body.status === 'descartada' && b) await db.prepare("UPDATE bookings SET status='rechazado' WHERE id=?").run(b.id);
     }).immediate();
@@ -204,6 +266,11 @@ function bookingsRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * POST /api/admin/guest-requests/:id/convert. Tramita la solicitud invitada hacia solicitado
+   * para que el profesional responda. Si es una solicitud antigua sin reserva, crea el vínculo;
+   * notifica y audita sin aprobar automáticamente.
+   */
   app.post('/api/admin/guest-requests/:id/convert', wrap(async (req, res) => {
     S.admin(req);
     await schedule.expire();
@@ -211,6 +278,8 @@ function bookingsRoutes(app) {
     if (!g) S.fail(404, 'Solicitud no encontrada.');
     let b;
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       if (!g.booking_id) {
         const service = await db.prepare('SELECT id FROM services WHERE professional_id=? AND published IS NOT NULL ORDER BY created_at LIMIT 1').get(g.professional_id);
         if (!service) S.fail(409, 'El servicio necesita aprobación antes de tramitar esta solicitud anterior.');
@@ -238,11 +307,18 @@ function bookingsRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * PATCH /api/bookings/:id. Permite reprogramar a administración o aceptar, rechazar y entregar
+   * al profesional propietario. Revalida estado y agenda bajo transacción; entregar exige pago,
+   * término del intervalo y evidencia textual.
+   */
   app.patch('/api/bookings/:id', wrap(async (req, res) => {
     await schedule.expire();
     let b = await access(req, req.params.id);
     const wanted = req.body.status;
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       b = await access(req, req.params.id);
       if (req.body.date || req.body.time) {
         S.admin(req);
@@ -279,6 +355,11 @@ function bookingsRoutes(app) {
     if (b.guest && wanted === 'aceptado') await guestLink(b);
     res.json(await bookingView(req, b));
   }));
+  /**
+   * POST /api/evaluations. Exige cliente de una reserva entregada o confirmada, puntaje válido y
+   * comentario privado. Impide duplicados y registra la evaluación junto con la confirmación de
+   * entrega.
+   */
   app.post('/api/evaluations', wrap(async (req, res) => {
     const b = await access(req, req.body.bookingId);
     await customer(req, b);
@@ -287,6 +368,8 @@ function bookingsRoutes(app) {
     if (!comment) S.fail(400, 'Escribe tu evaluación privada.');
     const stars = integer(req.body.stars || 5, 1, 5, 'Evaluación');
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const current = await access(req, b.id);
       if (!['entregado', 'confirmado'].includes(current.status) || (await db.prepare('SELECT 1 FROM evaluations WHERE booking_id=?').get(b.id))) S.fail(409, 'La entrega ya fue confirmada.');
       await db.prepare('INSERT INTO evaluations(id,professional_id,professional_name,booking_id,org_name,org_email,stars,comment,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(S.id('ev'), b.professional_id, b.professional_name, b.id, b.org_name, b.org_email, stars, comment, Date.now());
@@ -296,10 +379,14 @@ function bookingsRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * GET /api/bookings/:id/messages. Exige acceso a la reserva y pago confirmado antes de devolver
+   * los mensajes ordenados.
+   */
   app.get('/api/bookings/:id/messages', wrap(async (req, res) => {
     const b = await access(req, req.params.id);
     if (!b.paid_at) S.fail(403, 'El chat se habilita después del pago.');
-    res.json((await db.prepare('SELECT * FROM messages WHERE booking_id=? ORDER BY created_at').all(b.id)).map(m => ({
+    res.json((await db.prepare('SELECT * FROM messages WHERE booking_id=? ORDER BY created_at').all(b.id)).map(/* Transforma cada elemento con { id: m.id, senderRole: m.sender_role, senderName: m.sender_name, body: m.body, createdAt: m.created_at } para construir la colección utilizada por esta operación. */ m => ({
       id: m.id,
       senderRole: m.sender_role,
       senderName: m.sender_name,
@@ -307,6 +394,10 @@ function bookingsRoutes(app) {
       createdAt: m.created_at
     })));
   }));
+  /**
+   * POST /api/bookings/:id/messages. Exige acceso y pago, limita frecuencia y valida el texto.
+   * Obtiene autor y rol de la sesión, ignorando una identidad enviada por el cliente.
+   */
   app.post('/api/bookings/:id/messages', wrap(async (req, res) => {
     const b = await access(req, req.params.id);
     if (!b.paid_at) S.fail(403, 'El chat se habilita después del pago.');
@@ -320,10 +411,19 @@ function bookingsRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * GET /api/bookings/:id/attachments. Comprueba propiedad de la reserva y devuelve metadatos de
+   * documentos, sin incluir sus bytes.
+   */
   app.get('/api/bookings/:id/attachments', wrap(async (req, res) => {
     const b = await access(req, req.params.id);
     res.json(await db.prepare('SELECT id,name,mime,created_at FROM attachments WHERE booking_id=?').all(b.id));
   }));
+  /**
+   * POST /api/bookings/:id/attachments. Exige pago y acceso; decodifica Base64 y valida firma
+   * PDF/PNG/JPEG, tamaño máximo de 5 MB y hasta 20 adjuntos. Guarda contenido binario y autor en
+   * PostgreSQL.
+   */
   app.post('/api/bookings/:id/attachments', wrap(async (req, res) => {
     const b = await access(req, req.params.id);
     if (!b.paid_at) S.fail(409, 'Adjunta documentos después del pago.');
@@ -339,6 +439,10 @@ function bookingsRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * GET /api/attachments/:id. Busca el documento, verifica acceso a su reserva y devuelve sus
+   * bytes con tipo y nombre de descarga.
+   */
   app.get('/api/attachments/:id', wrap(async (req, res) => {
     const a = await db.prepare('SELECT * FROM attachments WHERE id=?').get(req.params.id);
     if (!a) S.fail(404, 'Documento no encontrado.');

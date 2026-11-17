@@ -1,24 +1,43 @@
+/**
+ * Flujo del módulo. Componentes base y funciones heredadas del navegador. Orden de carga: app.js
+ * → booking-view.js → workspace.js → policies.js; administración añade admin-sidebar.js. Varias
+ * funciones se reemplazan o se conservan mediante alias: leer su comentario antes de
+ * modificarlas. La base vigente es PostgreSQL detrás de Express.
+ */
+
 /* ============================================================
    SKILLY — Cliente (frontend)
    ------------------------------------------------------------
-   Todo el estado se guarda en tu servidor Express + SQLite
+   El estado vigente se guarda en Express + PostgreSQL
    (ver server/index.js y server/db.js). Este archivo solo llama
    a la API vía fetch() — no depende de Claude en absoluto.
    ============================================================ */
 
 /* ---------------- Cliente de la API ---------------- */
 const Api = {
+  /**
+   * Consulta una colección de la API con GET y resuelve su JSON. Es el cliente inicial;
+   * workspace.js reemplaza este método para unificar errores y solicitudes.
+   */
   async list(resource, query = '') {
     const r = await fetch(`/api/${resource}${query}`);
     if (!r.ok) throw new Error('Error al listar ' + resource);
     return r.json();
   },
+  /**
+   * Envía JSON con POST y devuelve el recurso o lanza el mensaje del servidor. workspace.js
+   * sustituye este método y añade la aceptación de términos a las operaciones de pago.
+   */
   async create(resource, data) {
     const r = await fetch(`/api/${resource}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || 'Error al crear en ' + resource);
     return body;
   },
+  /**
+   * Envía un PATCH para el recurso e identificador recibidos. Implementación inicial que admite la
+   * antigua cabecera administrativa; workspace.js la reemplaza por sesiones con cookie.
+   */
   async update(resource, id, data, admin = false) {
     const headers = { 'Content-Type': 'application/json' };
     if (admin && SESSION?.adminPasscode) headers['x-admin-passcode'] = SESSION.adminPasscode;
@@ -27,11 +46,19 @@ const Api = {
     if (!r.ok) throw new Error(body.error || 'Error al actualizar ' + resource);
     return body;
   },
+  /**
+   * Consulta un recurso administrativo con la antigua cabecera de clave y devuelve un arreglo
+   * vacío ante error. Se reemplaza en workspace.js por la API autenticada vigente.
+   */
   async adminGet(resource) {
     const r = await fetch(`/api/admin/${resource}`, { headers: { 'x-admin-passcode': SESSION?.adminPasscode || '' } });
     if (!r.ok) return [];
     return r.json();
   },
+  /**
+   * Intenta el ingreso administrativo con una clave compartida en una ruta heredada. No forma
+   * parte del ingreso actual, que utiliza correo, contraseña y auth/login desde workspace.js.
+   */
   async adminLogin(passcode) {
     const r = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passcode }) });
     return (await r.json()).ok;
@@ -45,16 +72,34 @@ let BOOKINGS = [];
 let PAYMENTS = [];
 let EVALUATIONS = []; // solo se llena cuando hay sesión de admin
 
+/**
+ * Recupera el objeto de sesión antiguo desde localStorage. workspace.js reemplaza esta función
+ * por una operación vacía: la sesión vigente se consulta al servidor.
+ */
 function loadSession() {
   try { const raw = localStorage.getItem('skilly_session'); SESSION = raw ? JSON.parse(raw) : null; } catch (e) { SESSION = null; }
 }
+/**
+ * Actualiza SESSION, persiste el objeto antiguo en localStorage y redibuja la cabecera. La
+ * versión vigente de workspace.js elimina ese almacenamiento y conserva solo los datos de
+ * presentación en memoria.
+ */
 function saveSession(s) {
   SESSION = s;
   try { s ? localStorage.setItem('skilly_session', JSON.stringify(s)) : localStorage.removeItem('skilly_session'); } catch (e) {}
   renderSession();
 }
+/**
+ * Limpia la sesión local antigua y vuelve al inicio. workspace.js la sustituye por un cierre que
+ * también invalida la sesión del servidor.
+ */
 function logout() { saveSession(null); toast('Sesión cerrada'); page('home'); }
 
+/**
+ * Carga profesionales, reservas, pagos y evaluaciones administrativas y refresca las vistas
+ * visibles. La versión de workspace.js agrega servicios y utiliza los datos ya filtrados por rol
+ * desde la API.
+ */
 async function refreshAll() {
   const query = SESSION?.role === 'organizacion' ? '' : '';
   const [profs, bookings, payments] = await Promise.all([
@@ -73,6 +118,10 @@ async function refreshAll() {
 }
 
 /* ---------------- Utilidades ---------------- */
+/**
+ * Muestra un aviso temporal accesible y reinicia su temporizador de cierre. Si el diálogo de
+ * autenticación está abierto, coloca el aviso dentro de él para que no quede detrás.
+ */
 function toast(msg, ms = 3200) {
   let t = document.getElementById('toastEl');
   if (!t) { t = document.createElement('div'); t.id = 'toastEl'; t.className = 'toast'; document.body.appendChild(t); }
@@ -80,21 +129,43 @@ function toast(msg, ms = 3200) {
   if (t.parentElement !== host) host.append(t);
   t.setAttribute('role', 'status');
   t.textContent = msg; t.style.display = 'block';
-  clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, ms);
+  clearTimeout(t._h); t._h = setTimeout(() => {
+    // Oculta el aviso una vez transcurrido el tiempo configurado.
+     t.style.display = 'none'; }, ms);
 }
+/**
+ * Formatea una cifra como pesos con separadores es-CL y prefijo $. Para cadenas elimina
+ * caracteres no numéricos; es una utilidad de presentación, no validación financiera.
+ */
 function fmtMoney(n) { const num = typeof n === 'number' ? n : parseInt(String(n).replace(/[^0-9]/g, ''), 10) || 0; return '$' + num.toLocaleString('es-CL'); }
+/**
+ * Extrae dígitos de un precio textual y devuelve un entero o cero. Es una conversión heredada
+ * del cliente; el precio contractual vigente se toma del servidor.
+ */
 function parsePrice(p) { return parseInt(String(p).replace(/[^0-9]/g, ''), 10) || 0; }
-function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-function initials(name) { return (name || '').split(' ').map(a => a[0]).join('').slice(0, 2).toUpperCase(); }
+/**
+ * Convierte &, <, > y comillas a entidades HTML antes de insertar texto en plantillas. No valida
+ * URLs ni fragmentos de JavaScript.
+ */
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, /* Sustituye cada carácter especial por su entidad HTML para interpolar texto sin convertirlo en etiquetas. */ c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+/**
+ * Toma las iniciales del nombre, limita a dos letras y las devuelve en mayúsculas para la
+ * representación visual.
+ */
+function initials(name) { return (name || '').split(' ').map(/* Extrae a[0] de cada elemento para formar la lista que necesita esta operación. */ a => a[0]).join('').slice(0, 2).toUpperCase(); }
 
 /* ---------------- Navegación ---------------- */
+/**
+ * Alterna la sección visible, la navegación y sus renderizadores y detiene el sondeo de chat.
+ * workspace.js reemplaza esta navegación con restricciones adicionales por aplicación y rol.
+ */
 function page(id) {
   if (typeof chatPollTimer !== 'undefined' && chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
-  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(/* Quita la marca visual anterior de los elementos para reiniciar la selección. */ x => x.classList.remove('active'));
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.add('active');
-  document.querySelectorAll('.links a').forEach(a => a.classList.remove('active'));
+  document.querySelectorAll('.links a').forEach(/* Quita la marca visual anterior de los elementos para reiniciar la selección. */ a => a.classList.remove('active'));
   const navLink = document.querySelector(`.links a[data-page="${id}"]`);
   if (navLink) navLink.classList.add('active');
   window.scrollTo(0, 0);
@@ -103,6 +174,10 @@ function page(id) {
   if (id === 'admin') { if (SESSION?.role === 'admin') refreshAll().then(renderAdmin); else renderAdmin(); }
   if (id === 'bigDashboard') { if (SESSION?.role === 'admin') renderBigDashboard(); else { document.getElementById('bigDashboardContent').innerHTML = '<div class="dashCard"><h3>Acceso restringido</h3><p class="hint">Esta sección es solo para administradores de Skilly.</p></div>'; } }
 }
+/**
+ * Abre el diálogo nativo de ingreso/registro con su modo y foco apropiados, o muestra un modal
+ * convencional. El diálogo nativo mantiene la autenticación en la capa superior del navegador.
+ */
 function openM(id) {
   const dialog = document.getElementById('authDialog');
   if (dialog && (id === 'login' || id === 'register')) {
@@ -119,12 +194,20 @@ function openM(id) {
   }
   document.getElementById(id).classList.add('show');
 }
+/**
+ * Cierra el diálogo nativo cuando corresponde a autenticación; para los otros modales quita la
+ * clase show.
+ */
 function closeM(id) {
   const dialog = document.getElementById('authDialog');
   if (dialog && ['authDialog', 'login', 'register'].includes(id)) dialog.close();
   else document.getElementById(id).classList.remove('show');
 }
 
+/**
+ * Muestra nombre, rol y enlaces según SESSION en la cabecera inicial. workspace.js sustituye
+ * esta versión para separar profesional, organización y aplicación administrativa.
+ */
 function renderSession() {
   const box = document.getElementById('sessionBox');
   const guestBox = document.getElementById('guestBox');
@@ -147,14 +230,24 @@ function renderSession() {
   }
 }
 
+/**
+ * Actualiza los contadores visibles de elementos validados y reservas con los arreglos cargados.
+ * No realiza consultas nuevas ni calcula estadísticas globales del servidor.
+ */
 function updateStats() {
   const p = document.getElementById('statProf'); const b = document.getElementById('statBookings');
-  if (p) p.textContent = '+' + PROFESSIONALS.filter(x => x.status === 'validado').length;
+  if (p) p.textContent = '+' + PROFESSIONALS.filter(/* Conserva los elementos según la condición x.status === 'validado'. Se evalúan los datos ya cargados. */ x => x.status === 'validado').length;
   if (b) b.textContent = String(BOOKINGS.length);
 }
 
 /* ---------------- Home / búsqueda rápida ---------------- */
+/**
+ * Navega al catálogo, aplica el texto recibido al buscador y vuelve a dibujar los resultados.
+ */
 function quick(q) { page('market'); document.getElementById('q').value = q; renderMarket(); }
+/**
+ * Toma el texto del buscador principal y lo pasa a quick para abrir el catálogo filtrado.
+ */
 function search() { quick(document.getElementById('heroInput').value); }
 
 /* ---------------- Marketplace — SOLO servicios, identidad oculta ----------------
@@ -162,21 +255,28 @@ function search() { quick(document.getElementById('heroInput').value); }
    SERVICIOS. La identidad del profesional (nombre, LinkedIn, avatar) NO se
    muestra en la navegación pública ni en la ficha del servicio — recién se
    revela a la organización una vez que paga la reserva (para coordinar) y
-   de forma completa cuando el servicio queda marcado como completado. */
+   según la vista autorizada que devuelve el servidor después del pago. */
+/**
+ * Filtra los servicios cargados por texto, categoría y validación, prioriza recomendados y
+ * genera tarjetas sin identidad profesional. workspace.js conserva este renderizador mediante
+ * oldRenderMarket y restringe quién puede abrirlo.
+ */
 function renderMarket() {
   const q = (document.getElementById('q')?.value || '').toLowerCase();
   const cat = document.getElementById('cat')?.value || '';
   const onlyValidated = document.getElementById('onlyValidated')?.checked ?? true;
   let arr = PROFESSIONALS.filter(x => {
+    // Conserva los servicios que cumplen validación, categoría y texto de búsqueda antes de ordenar las tarjetas.
+    
     if (onlyValidated && x.status !== 'validado') return false;
     if (cat && x.category !== cat) return false;
     if (q) { const hay = [x.title, x.category, ...(x.tags || [])].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
     return true;
   });
-  arr = arr.sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0));
+  arr = arr.sort(/* Coloca primero los servicios recomendados por Skilly sin calcular un ranking público de evaluaciones. */ (a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0));
   const el = document.getElementById('results');
   if (!arr.length) { el.innerHTML = '<div class="empty">No encontramos servicios con esos criterios. Prueba otra búsqueda o categoría.</div>'; return; }
-  el.innerHTML = arr.map(x => `
+  el.innerHTML = arr.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ x => `
     <article class="card">
       <div class="cardhead" style="align-items:flex-start">
         <b style="font-size:16px">${escapeHtml(x.title)}</b>
@@ -186,14 +286,19 @@ function renderMarket() {
         </div>
       </div>
       <p>${escapeHtml(x.description || '')}</p>
-      <div class="chips">${(x.tags || []).map(t => `<span class="chip">${escapeHtml(t)}</span>`).join('')}</div>
+      <div class="chips">${(x.tags || []).map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ t => `<span class="chip">${escapeHtml(t)}</span>`).join('')}</div>
       <div class="cardbottom"><span>${escapeHtml(x.modality || '')}</span><b>Desde ${fmtMoney(x.price)}</b></div>
       <button class="btn primary full" onclick="openProfile('${x.id}')">Ver servicio y disponibilidad</button>
     </article>`).join('');
 }
 
+/**
+ * Busca el servicio cargado y presenta descripción, precio, dedicación y disponibilidad en un
+ * modal. No muestra antecedentes privados; workspace.js reutiliza esta función con guardas de
+ * rol.
+ */
 function openProfile(id) {
-  const x = PROFESSIONALS.find(p => p.id === id);
+  const x = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === id. Se evalúan los datos ya cargados. */ p => p.id === id);
   if (!x) return;
   const box = document.getElementById('profileBox');
   const totalMin = (x.durationMinutes || 60) + (x.prepMinutes || 0) + (x.followupMinutes || 0);
@@ -207,7 +312,7 @@ function openProfile(id) {
       </div>
     </div>
     <p>${escapeHtml(x.description || '')}</p>
-    <div class="chips">${(x.tags || []).map(t => `<span class="chip">${escapeHtml(t)}</span>`).join('')}</div>
+    <div class="chips">${(x.tags || []).map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ t => `<span class="chip">${escapeHtml(t)}</span>`).join('')}</div>
     <div class="row">Modalidad <b>${escapeHtml(x.modality || '—')}</b></div>
     <div class="row">Tarifa referencial <b>${fmtMoney(x.price)}</b></div>
     <div class="row">Días disponibles <b>${(x.availability?.days || []).join(', ') || 'Por coordinar'}</b></div>
@@ -222,12 +327,20 @@ function openProfile(id) {
 
 /* ---------------- Login ---------------- */
 let loginRole = 'organizacion';
+/**
+ * Alterna los campos de ingreso del prototipo según el rol elegido. workspace.js la reemplaza
+ * para usar correo y contraseña también en administración.
+ */
 function setLoginRole(role) {
   loginRole = role;
-  document.querySelectorAll('#login .rolesel button').forEach(b => b.classList.toggle('on', b.dataset.role === role));
+  document.querySelectorAll('#login .rolesel button').forEach(/* Sincroniza la clase visual de cada control con la opción o sección actualmente seleccionada. */ b => b.classList.toggle('on', b.dataset.role === role));
   document.getElementById('loginFieldsOrgPro').style.display = role === 'admin' ? 'none' : 'block';
   document.getElementById('loginFieldsAdmin').style.display = role === 'admin' ? 'block' : 'none';
 }
+/**
+ * Implementa el ingreso heredado por correo o clave administrativa compartida. Está reemplazado
+ * por doLogin de workspace.js y no describe la autenticación vigente del servidor.
+ */
 async function doLogin() {
   if (loginRole === 'admin') {
     const pass = document.getElementById('loginPass').value;
@@ -241,7 +354,7 @@ async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   if (!email) { toast('Ingresa tu correo'); return; }
   if (loginRole === 'profesional') {
-    const prof = PROFESSIONALS.find(p => (p.email || '').toLowerCase() === email);
+    const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición (p.email || '').toLowerCase() === email. Se evalúan los datos ya cargados. */ p => (p.email || '').toLowerCase() === email);
     if (!prof) { toast('No encontramos una cuenta profesional con ese correo. ¿Quieres crear una?'); return; }
     saveSession({ role: 'profesional', name: prof.name, email: prof.email, professionalId: prof.id });
     closeM('login'); toast('Bienvenido/a, ' + prof.name); page('dashboard');
@@ -253,16 +366,27 @@ async function doLogin() {
 
 /* ---------------- Registro ---------------- */
 let regRole = null, regStep = 1, regProDraft = {};
+/**
+ * Reinicia rol, paso y borrador del asistente y abre el registro. workspace.js conserva esta
+ * función mediante previousOpenRegister y agrega limpieza de errores.
+ */
 function openRegister() {
   regRole = null; regStep = 1; regProDraft = {};
-  document.querySelectorAll('#register .rolesel button').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('#register .rolesel button').forEach(/* Quita la marca visual anterior de los elementos para reiniciar la selección. */ b => b.classList.remove('on'));
   showRegStep(); openM('register');
 }
+/**
+ * Guarda el rol seleccionado y avanza al formulario inicial correspondiente del asistente.
+ */
 function chooseRegRole(role) {
   regRole = role;
-  document.querySelectorAll('#register .rolesel button').forEach(b => b.classList.toggle('on', b.dataset.role === role));
+  document.querySelectorAll('#register .rolesel button').forEach(/* Sincroniza la clase visual de cada control con la opción o sección actualmente seleccionada. */ b => b.classList.toggle('on', b.dataset.role === role));
   regStep = 2; showRegStep();
 }
+/**
+ * Muestra únicamente el paso de registro seleccionado y actualiza la barra de progreso. El paso
+ * 9 representa la confirmación final.
+ */
 function showRegStep() {
   document.getElementById('regStepRole').style.display = regStep === 1 ? 'block' : 'none';
   document.getElementById('regStepOrg').style.display = (regStep === 2 && regRole === 'organizacion') ? 'block' : 'none';
@@ -272,10 +396,18 @@ function showRegStep() {
   const bar = document.getElementById('regStepbar');
   const total = regRole === 'profesional' ? 3 : 2;
   const current = regStep === 9 ? total : regStep;
-  bar.innerHTML = Array.from({ length: total }).map((_, i) => `<div class="${i < current ? 'on' : ''}"></div>`).join('');
+  bar.innerHTML = Array.from({ length: total }).map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ (_, i) => `<div class="${i < current ? 'on' : ''}"></div>`).join('');
 }
+/**
+ * Retrocede desde antecedentes al formulario básico o desde el formulario básico a la selección
+ * de rol y redibuja el asistente.
+ */
 function regBack() { if (regStep > 1) { regStep = regStep === 3 ? 2 : 1; showRegStep(); } }
 
+/**
+ * Crea únicamente una sesión local en el prototipo antiguo. Está reemplazada por el registro
+ * real en auth/register de workspace.js.
+ */
 async function submitOrgRegister() {
   const name = document.getElementById('orgName').value.trim();
   const email = document.getElementById('orgEmail').value.trim().toLowerCase();
@@ -284,6 +416,11 @@ async function submitOrgRegister() {
   closeM('register'); toast('Cuenta de organización creada'); page('market');
 }
 
+/**
+ * Recoge los datos del primer servicio y disponibilidad en regProDraft y avanza a antecedentes.
+ * workspace.js conserva esta función como oldProNext después de agregar validaciones de correo,
+ * contraseña y precio.
+ */
 function regProNext() {
   const name = document.getElementById('proName').value.trim();
   const email = document.getElementById('proEmail').value.trim().toLowerCase();
@@ -294,15 +431,19 @@ function regProNext() {
   const description = document.getElementById('proDesc').value.trim();
   const tags = document.getElementById('proTags').value.trim();
   if (!name || !email || !title || !price) { toast('Completa los campos obligatorios'); return; }
-  const days = Array.from(document.querySelectorAll('.proDay:checked')).map(c => c.value);
+  const days = Array.from(document.querySelectorAll('.proDay:checked')).map(/* Extrae c.value de cada elemento para formar la lista que necesita esta operación. */ c => c.value);
   regProDraft = {
     name, email, category, title, price, modality, description,
-    tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+    tags: tags ? tags.split(',').map(/* Elimina espacios exteriores de cada valor antes de descartar entradas vacías o enviar los datos. */ t => t.trim()).filter(Boolean) : [],
     availability: { days: days.length ? days : ['Lunes', 'Miércoles', 'Viernes'], hours: ['09:00', '11:00', '15:00'] },
   };
   regStep = 3; showRegStep();
 }
 
+/**
+ * Envía antecedentes al antiguo alta de professionals y arma una sesión local. workspace.js la
+ * reemplaza por el registro transaccional de cuenta, perfil y servicio.
+ */
 async function submitProValidation() {
   const linkedin = document.getElementById('valLinkedin').value.trim();
   const yearsExperience = document.getElementById('valYears').value.trim();
@@ -320,14 +461,22 @@ async function submitProValidation() {
     regStep = 9; showRegStep();
   } catch (e) { console.error(e); toast(e.message || 'No se pudo enviar tu solicitud.'); }
 }
+/**
+ * Cierra el asistente terminado y abre el panel de la sesión actual.
+ */
 function finishRegister() { closeM('register'); page('dashboard'); }
 
 /* ---------------- Agendamiento ---------------- */
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 let bookingCtx = { professionalId: null, date: null, time: null };
 
+/**
+ * Inicia el agendamiento heredado a partir de un profesional y ofrece alternativas a visitantes.
+ * workspace.js lo sustituye por selección de un servicio independiente y solicitud previa a la
+ * aceptación.
+ */
 function startBooking(professionalId) {
-  const prof = PROFESSIONALS.find(p => p.id === professionalId);
+  const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === professionalId. Se evalúan los datos ya cargados. */ p => p.id === professionalId);
   if (!prof || prof.status !== 'validado') { toast('Este profesional aún no está validado'); return; }
   if (!SESSION || SESSION.role !== 'organizacion') {
     // Sin cuenta: ofrecemos iniciar sesión/registrarse, o pedir el horario
@@ -339,8 +488,12 @@ function startBooking(professionalId) {
   renderBookingModal(prof); openM('booking');
 }
 
+/**
+ * Presenta las opciones antiguas de ingresar, registrarse o solicitar sin cuenta. El
+ * startBooking vigente abre directamente el formulario de invitado y no usa este paso.
+ */
 function openGuestChoice(professionalId) {
-  const prof = PROFESSIONALS.find(p => p.id === professionalId);
+  const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === professionalId. Se evalúan los datos ya cargados. */ p => p.id === professionalId);
   const box = document.getElementById('guestBookingBox');
   box.innerHTML = `
     <button class="close" onclick="closeM('guestBooking')">×</button>
@@ -361,11 +514,15 @@ function openGuestChoice(professionalId) {
   openM('guestBooking');
 }
 
+/**
+ * Dibuja el formulario heredado de invitado con horarios de la disponibilidad cargada.
+ * workspace.js lo reemplaza y consulta horarios efectivos en el servidor.
+ */
 function renderGuestForm(professionalId) {
-  const prof = PROFESSIONALS.find(p => p.id === professionalId);
+  const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === professionalId. Se evalúan los datos ya cargados. */ p => p.id === professionalId);
   const dayOpts = nextAvailableDays(prof);
   const box = document.getElementById('guestBookingBox');
-  const dayOptionsHtml = dayOpts.map(d => `<option value="${d.key}">${d.date.getDate()} ${d.label} (${d.key})</option>`).join('');
+  const dayOptionsHtml = dayOpts.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ d => `<option value="${d.key}">${d.date.getDate()} ${d.label} (${d.key})</option>`).join('');
   box.innerHTML = `
     <button class="close" onclick="closeM('guestBooking')">×</button>
     <small>RESERVAR SIN REGISTRO</small>
@@ -379,13 +536,17 @@ function renderGuestForm(professionalId) {
     </div>
     <div class="formgrid2">
       <label>Día preferido<select id="gDate">${dayOptionsHtml}</select></label>
-      <label>Hora preferida<select id="gTime">${(prof.availability?.hours || []).map(h => `<option>${h}</option>`).join('')}</select></label>
+      <label>Hora preferida<select id="gTime">${(prof.availability?.hours || []).map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ h => `<option>${h}</option>`).join('')}</select></label>
     </div>
     <label>Notas para Skilly (opcional)<textarea id="gNotes" placeholder="Contexto del servicio que necesitas"></textarea></label>
     <p class="hint">Un administrador de Skilly recibirá esta solicitud por correo y te contactará para coordinar el pago (Webpay, PayPal u otro medio).</p>
     <button class="btn primary full" id="guestSubmitBtn" onclick="submitGuestRequest('${professionalId}')">Enviar solicitud a Skilly</button>`;
 }
 
+/**
+ * Envía la solicitud invitada desde el formulario antiguo y muestra su confirmación.
+ * workspace.js sustituye esta versión por el flujo con reserva vinculada y enlace seguro.
+ */
 async function submitGuestRequest(professionalId) {
   const contactName = document.getElementById('gName').value.trim();
   const orgName = document.getElementById('gOrg').value.trim();
@@ -407,6 +568,11 @@ async function submitGuestRequest(professionalId) {
     console.error(e); toast(e.message || 'No se pudo enviar la solicitud'); btn.disabled = false; btn.textContent = 'Enviar solicitud a Skilly';
   }
 }
+/**
+ * Construye días candidatos desde la disponibilidad local del prototipo. workspace.js la
+ * sustituye por un cálculo que parte de la fecha de Chile; los cupos reales siempre se consultan
+ * a la API.
+ */
 function nextAvailableDays(prof, count = 8) {
   const out = []; const days = prof.availability?.days || []; let d = new Date(); let guard = 0;
   while (out.length < count && guard < 30) {
@@ -416,10 +582,14 @@ function nextAvailableDays(prof, count = 8) {
   }
   return out;
 }
+/**
+ * Construye el selector de días, horarios y notas y consulta el primer día. workspace.js
+ * reutiliza su estructura y corrige título y acción para solicitar un servicio antes del pago.
+ */
 function renderBookingModal(prof) {
   const dayOpts = nextAvailableDays(prof);
   const box = document.getElementById('bookingBox');
-  const dayTabsHtml = dayOpts.map((d, i) => `<button data-key="${d.key}" onclick="pickBookingDay('${d.key}')" class="${i === 0 ? 'on' : ''}">${d.date.getDate()} ${d.label.slice(0, 3)}</button>`).join('');
+  const dayTabsHtml = dayOpts.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ (d, i) => `<button data-key="${d.key}" onclick="pickBookingDay('${d.key}')" class="${i === 0 ? 'on' : ''}">${d.date.getDate()} ${d.label.slice(0, 3)}</button>`).join('');
   box.innerHTML = `
     <button class="close" onclick="closeM('booking')">×</button>
     <small>AGENDAR SERVICIO</small>
@@ -434,26 +604,38 @@ function renderBookingModal(prof) {
     <button class="btn primary full" id="confirmBookingBtn" onclick="confirmBooking()" disabled>Confirmar y continuar a pago</button>`;
   if (dayOpts.length) pickBookingDay(dayOpts[0].key);
 }
+/**
+ * Calcula horarios libres a partir de reservas cargadas en el cliente. La implementación vigente
+ * de workspace.js consulta la disponibilidad del servidor, incluyendo preparación y seguimiento.
+ */
 async function pickBookingDay(key) {
   bookingCtx.date = key; bookingCtx.time = null;
-  document.querySelectorAll('#dayTabs button').forEach(b => b.classList.toggle('on', b.dataset.key === key));
-  const prof = PROFESSIONALS.find(p => p.id === bookingCtx.professionalId);
+  document.querySelectorAll('#dayTabs button').forEach(/* Sincroniza la clase visual de cada control con la opción o sección actualmente seleccionada. */ b => b.classList.toggle('on', b.dataset.key === key));
+  const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === bookingCtx.professionalId. Se evalúan los datos ya cargados. */ p => p.id === bookingCtx.professionalId);
   const hours = prof.availability?.hours || ['09:00', '11:00', '15:00'];
-  const taken = BOOKINGS.filter(b => b.professionalId === prof.id && b.date === key && b.status !== 'cancelado').map(b => b.time);
-  const free = hours.filter(h => !taken.includes(h));
+  const taken = BOOKINGS.filter(/* Conserva los elementos según la condición b.professionalId === prof.id && b.date === key && b.status !== 'cancelado'. Se evalúan los datos ya cargados. */ b => b.professionalId === prof.id && b.date === key && b.status !== 'cancelado').map(/* Extrae b.time de cada elemento para formar la lista que necesita esta operación. */ b => b.time);
+  const free = hours.filter(/* Conserva los elementos según la condición !taken.includes(h). Se evalúan los datos ya cargados. */ h => !taken.includes(h));
   const grid = document.getElementById('slotGrid');
   if (!free.length) { grid.innerHTML = '<div class="hint">Sin horarios disponibles este día, prueba otro.</div>'; document.getElementById('confirmBookingBtn').disabled = true; return; }
-  grid.innerHTML = free.map(h => `<button onclick="pickBookingTime('${h}')">${h}</button>`).join('');
+  grid.innerHTML = free.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ h => `<button onclick="pickBookingTime('${h}')">${h}</button>`).join('');
   document.getElementById('confirmBookingBtn').disabled = true;
 }
+/**
+ * Guarda la hora elegida, resalta su botón y habilita el envío de la solicitud. El servidor
+ * vuelve a validar disponibilidad al crear la reserva.
+ */
 function pickBookingTime(t) {
   bookingCtx.time = t;
-  document.querySelectorAll('#slotGrid button').forEach(b => b.classList.toggle('on', b.textContent === t));
+  document.querySelectorAll('#slotGrid button').forEach(/* Sincroniza la clase visual de cada control con la opción o sección actualmente seleccionada. */ b => b.classList.toggle('on', b.textContent === t));
   document.getElementById('confirmBookingBtn').disabled = false;
 }
+/**
+ * Envía los datos del agendamiento antiguo y abre directamente el pago. workspace.js reemplaza
+ * esta función: el servidor fija precio y la solicitud debe ser aceptada antes de pagar.
+ */
 async function confirmBooking() {
   if (!bookingCtx.date || !bookingCtx.time) { toast('Elige un día y horario'); return; }
-  const prof = PROFESSIONALS.find(p => p.id === bookingCtx.professionalId);
+  const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === bookingCtx.professionalId. Se evalúan los datos ya cargados. */ p => p.id === bookingCtx.professionalId);
   const notes = document.getElementById('bookingNotes').value.trim();
   const bookingData = {
     professionalId: prof.id, professionalName: prof.name, professionalEmail: prof.email,
@@ -473,12 +655,21 @@ async function confirmBooking() {
 
 /* ---------------- Checkout / métodos de pago reales ---------------- */
 let SERVER_CONFIG = { mailerConfigured: false, paypalConfigured: false, webpayEnv: 'integration' };
+/**
+ * Carga configuración pública de proveedores y entorno desde config. Si falla conserva los
+ * valores existentes para que la interfaz pueda mostrar su estado inicial.
+ */
 async function loadServerConfig() {
   try { SERVER_CONFIG = await Api.list('config'); } catch (e) { /* usa valores por defecto */ }
 }
 
+/**
+ * Construye las opciones visuales de Webpay, PayPal y pago simulado para la reserva.
+ * workspace.js conserva esta base y agrega condiciones y guardas; algunos textos heredados aún
+ * describen toda liquidación como simulada.
+ */
 function openCheckout(bookingId) {
-  const b = BOOKINGS.find(x => x.id === bookingId);
+  const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === bookingId. Se evalúan los datos ya cargados. */ x => x.id === bookingId);
   if (!b) return;
   const box = document.getElementById('checkoutBox');
   const webpayIsIntegration = SERVER_CONFIG.webpayEnv !== 'production';
@@ -515,6 +706,11 @@ function openCheckout(bookingId) {
   openM('checkout');
 }
 
+/**
+ * Solicita un intento de pago al servidor y envía token_ws mediante un formulario POST al
+ * proveedor. Muestra errores de conexión; la confirmación financiera ocurre en el retorno del
+ * servidor.
+ */
 async function payWithWebpay(bookingId) {
   try {
     toast('Conectando con Webpay...');
@@ -533,6 +729,10 @@ async function payWithWebpay(bookingId) {
   }
 }
 
+/**
+ * Solicita la orden PayPal y redirige a approveUrl. Si el proveedor no devuelve enlace o la API
+ * falla, presenta un aviso sin acreditar la reserva.
+ */
 async function payWithPaypal(bookingId) {
   try {
     toast('Conectando con PayPal...');
@@ -545,19 +745,27 @@ async function payWithPaypal(bookingId) {
 // Pago simulado: no cobra nada real ni requiere Webpay/PayPal — queda para
 // poder probar el resto del flujo (entrega, chat, evaluación, liberación)
 // sin depender de la tarjeta de prueba de Transbank o de internet.
+/**
+ * Solicita un pago de prueba, refresca los datos y descarga el comprobante antes de abrir el
+ * panel. La API restringe esta operación fuera de producción y no realiza un cargo bancario.
+ */
 async function payWithSimulated(bookingId) {
   try {
     const payment = await Api.create('payments', { bookingId, method: 'Pago simulado' });
     await refreshAll();
     closeM('checkout');
     toast('Pago simulado realizado. El monto queda retenido hasta la entrega del servicio.');
-    const booking = BOOKINGS.find(x => x.id === bookingId);
+    const booking = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === bookingId. Se evalúan los datos ya cargados. */ x => x.id === bookingId);
     if (booking) downloadReceipt(payment, booking);
     page('dashboard');
   } catch (e) { console.error(e); toast(e.message || 'No se pudo procesar el pago simulado'); }
 }
 
 // Al volver de Webpay/PayPal, el servidor nos redirige a "/?payment=success|failed|cancelled|timeout|error".
+/**
+ * Interpreta los parámetros del retorno de pasarela y, en el flujo antiguo, descarga el
+ * comprobante. El arranque actual usa skillyInit de workspace.js para procesar el retorno.
+ */
 function handlePaymentReturn() {
   const params = new URLSearchParams(window.location.search);
   const status = params.get('payment');
@@ -574,13 +782,20 @@ function handlePaymentReturn() {
   window.history.replaceState({}, '', window.location.pathname);
   if (status === 'success' && bookingId) {
     refreshAll().then(() => {
-      const payment = PAYMENTS.find(p => p.bookingId === bookingId);
-      const booking = BOOKINGS.find(b => b.id === bookingId);
+      // Recarga el pago y la reserva después del retorno exitoso y descarga su comprobante si ambos están presentes.
+      
+      const payment = PAYMENTS.find(/* Busca el primer elemento según la condición p.bookingId === bookingId. Se evalúan los datos ya cargados. */ p => p.bookingId === bookingId);
+      const booking = BOOKINGS.find(/* Busca el primer elemento según la condición b.id === bookingId. Se evalúan los datos ya cargados. */ b => b.id === bookingId);
       if (payment && booking) downloadReceipt(payment, booking);
       page('dashboard');
     });
   }
 }
+/**
+ * Genera el comprobante textual heredado usando pago y reserva y descarga un Blob. workspace.js
+ * sustituye esta función por otra que incorpora el desglose contractual; ninguna emite una
+ * factura tributaria.
+ */
 function downloadReceipt(payment, booking) {
   const providerLabel = { webpay: 'Webpay Plus (Transbank)', paypal: 'PayPal', simulado: 'Simulado' }[payment.provider] || payment.provider;
   const isReal = payment.provider === 'webpay' || payment.provider === 'paypal';
@@ -614,10 +829,14 @@ ${isReal
   const a = document.createElement('a');
   a.href = url; a.download = `comprobante-${payment.invoiceNumber}.txt`;
   document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  setTimeout(/* Libera la URL temporal del archivo después de iniciar su descarga. */ () => URL.revokeObjectURL(url), 2000);
 }
 
 /* ---------------- Ciclo de vida del servicio ---------------- */
+/**
+ * Envía el cambio antiguo a entregado sin evidencia. policies.js la reemplaza por un formulario
+ * que solicita descripción de la prestación.
+ */
 async function markDelivered(bookingId) {
   try {
     await Api.update('bookings', bookingId, { status: 'entregado' });
@@ -628,22 +847,34 @@ async function markDelivered(bookingId) {
 }
 
 let evalCtx = null;
+/**
+ * Asocia el modal de evaluación a una reserva y limpia estrellas y comentario antes de
+ * mostrarlo.
+ */
 function openEvaluate(bookingId) {
   evalCtx = bookingId;
-  document.querySelectorAll('#starPick span').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('#starPick span').forEach(/* Quita la marca visual anterior de los elementos para reiniciar la selección. */ s => s.classList.remove('on'));
   document.getElementById('evalStars').value = '0'; document.getElementById('evalComment').value = '';
   openM('evaluate');
 }
+/**
+ * Guarda el puntaje elegido y colorea las estrellas hasta ese valor. El servidor valida el rango
+ * al recibir la evaluación.
+ */
 function pickStar(n) {
   document.getElementById('evalStars').value = String(n);
-  document.querySelectorAll('#starPick span').forEach(s => s.classList.toggle('on', Number(s.dataset.n) <= n));
+  document.querySelectorAll('#starPick span').forEach(/* Sincroniza la clase visual de cada control con la opción o sección actualmente seleccionada. */ s => s.classList.toggle('on', Number(s.dataset.n) <= n));
 }
+/**
+ * Exige estrellas y comentario, envía la evaluación privada y refresca el panel. La ruta también
+ * confirma una reserva entregada; existe un botón separado para confirmar sin evaluar.
+ */
 async function submitEvaluation() {
   const stars = Number(document.getElementById('evalStars').value);
   const comment = document.getElementById('evalComment').value.trim();
   if (!stars) { toast('Selecciona un puntaje'); return; }
   if (!comment) { toast('Agrega un breve argumento de tu evaluación'); return; }
-  const b = BOOKINGS.find(x => x.id === evalCtx);
+  const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === evalCtx. Se evalúan los datos ya cargados. */ x => x.id === evalCtx);
   if (!b) return;
   try {
     await Api.create('evaluations', { professionalId: b.professionalId, professionalName: b.professionalName, bookingId: b.id, orgName: b.orgName, orgEmail: b.orgEmail, stars, comment });
@@ -655,6 +886,10 @@ async function submitEvaluation() {
 }
 
 /* ---------------- Dashboard ---------------- */
+/**
+ * Selecciona el panel inicial según la sesión. workspace.js reemplaza esta función y agrega
+ * pestañas y acceso de invitados.
+ */
 function renderDashboard() {
   const el = document.getElementById('dashContent');
   if (!SESSION) { el.innerHTML = `<div class="dashCard"><h3>Necesitas iniciar sesión</h3><p class="hint">Ingresa como organización o profesional para ver tu panel.</p><button class="btn primary" onclick="openM('login')">Ingresar</button></div>`; return; }
@@ -662,8 +897,12 @@ function renderDashboard() {
   else if (SESSION.role === 'organizacion') renderOrgDashboard(el);
   else el.innerHTML = `<div class="dashCard"><p class="hint">Los administradores usan el <a onclick="page('admin')" style="cursor:pointer;text-decoration:underline">panel de administración</a>.</p></div>`;
 }
+/**
+ * Construye el panel profesional antiguo de un único servicio, agenda y reservas. Está
+ * reemplazado por las pestañas y múltiples servicios de workspace.js.
+ */
 function renderProDashboard(el) {
-  const prof = PROFESSIONALS.find(p => p.id === SESSION.professionalId);
+  const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === SESSION.professionalId. Se evalúan los datos ya cargados. */ p => p.id === SESSION.professionalId);
   if (!prof) { el.innerHTML = '<div class="dashCard">No encontramos tu perfil.</div>'; return; }
   const statusPill = prof.status === 'validado' ? '<span class="pill ok">✓ Validado</span>'
     : prof.status === 'rechazado' ? '<span class="pill no">No validado</span>'
@@ -674,7 +913,7 @@ function renderProDashboard(el) {
   if (prof.status === 'rechazado') statusMsg = 'Tu solicitud no fue validada esta vez.' + (prof.adminNotes ? ' Comentario del equipo: "' + escapeHtml(prof.adminNotes) + '"' : '') + ' Puedes corregir tus antecedentes abajo y volver a enviarlos.';
   if (prof.status === 'info_solicitada') statusMsg = 'Skilly necesita más información de tu parte.' + (prof.adminNotes ? ' Detalle: "' + escapeHtml(prof.adminNotes) + '"' : '') + ' Completa lo que falta abajo y vuelve a enviarlo.';
   if (prof.status === 'validado') statusMsg = 'Tu perfil es visible en el marketplace y ya puedes recibir reservas.';
-  const myBookings = BOOKINGS.filter(b => b.professionalId === prof.id).sort((a, b) => b.createdAt - a.createdAt);
+  const myBookings = BOOKINGS.filter(/* Conserva los elementos según la condición b.professionalId === prof.id. Se evalúan los datos ya cargados. */ b => b.professionalId === prof.id).sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
   const canResubmit = prof.status === 'rechazado' || prof.status === 'info_solicitada';
 
   el.innerHTML = `
@@ -705,10 +944,10 @@ function renderProDashboard(el) {
       <label>Descripción<textarea id="svcDesc">${escapeHtml(prof.description || '')}</textarea></label>
       <div class="formgrid2">
         <label>Especialidad<select id="svcCategory">
-          ${['Tecnología', 'Marketing', 'Diseño', 'Consultoría'].map(c => `<option ${prof.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+          ${['Tecnología', 'Marketing', 'Diseño', 'Consultoría'].map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ c => `<option ${prof.category === c ? 'selected' : ''}>${c}</option>`).join('')}
         </select></label>
         <label>Modalidad<select id="svcModality">
-          ${['Remoto', 'Híbrido', 'Presencial'].map(m => `<option ${prof.modality === m ? 'selected' : ''}>${m}</option>`).join('')}
+          ${['Remoto', 'Híbrido', 'Presencial'].map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ m => `<option ${prof.modality === m ? 'selected' : ''}>${m}</option>`).join('')}
         </select></label>
       </div>
       <div class="formgrid2">
@@ -723,7 +962,7 @@ function renderProDashboard(el) {
       <p class="hint">Días y horarios en que ofreces este servicio. Actualízalo cuando cambie tu agenda.</p>
       <label>Días disponibles</label>
       <div class="checkgrid">
-        ${['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(d =>
+        ${['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ d =>
           `<label><input type="checkbox" class="svcDay" value="${d}" ${(prof.availability?.days || []).includes(d) ? 'checked' : ''}> ${d}</label>`).join('')}
       </div>
       <label>Horarios del día (separados por coma, formato HH:MM)<input id="svcHours" value="${escapeHtml((prof.availability?.hours || []).join(', '))}" placeholder="09:00, 11:00, 15:00"></label>
@@ -750,7 +989,9 @@ function renderProDashboard(el) {
 
     <div class="dashCard"><h3>Mis reservas</h3>
       ${myBookings.length ? myBookings.map(b => {
-        const payment = PAYMENTS.find(p => p.bookingId === b.id);
+        // Transforma cada registro en la estructura requerida por renderProDashboard, conservando su posición en el arreglo resultante.
+        
+        const payment = PAYMENTS.find(/* Busca el primer elemento según la condición p.bookingId === b.id. Se evalúan los datos ya cargados. */ p => p.bookingId === b.id);
         return `<div class="miniRow">
           <div><b>${escapeHtml(b.orgName)}</b><br><span class="hint">${escapeHtml(b.date)} · ${escapeHtml(b.time)} — ${escapeHtml(bookingStatusLabel(b.status))}</span></div>
           <div>
@@ -762,6 +1003,11 @@ function renderProDashboard(el) {
       }).join('') : '<p class="hint">Aún no tienes reservas.</p>'}
     </div>`;
 }
+/**
+ * Envía cambios del servicio al perfil en el panel heredado. La interfaz vigente utiliza
+ * saveService y la tabla services con revisión, por lo que este camino no administra
+ * publicaciones actuales.
+ */
 async function saveMyService(id) {
   const tags = document.getElementById('svcTags').value.trim();
   try {
@@ -773,16 +1019,20 @@ async function saveMyService(id) {
         category: document.getElementById('svcCategory').value,
         modality: document.getElementById('svcModality').value,
         price: document.getElementById('svcPrice').value.trim(),
-        tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+        tags: tags ? tags.split(',').map(/* Elimina espacios exteriores de cada valor antes de descartar entradas vacías o enviar los datos. */ t => t.trim()).filter(Boolean) : [],
       }),
     });
     await refreshAll(); toast('Servicio actualizado'); renderDashboard();
   } catch (e) { console.error(e); toast('No se pudo guardar'); }
 }
+/**
+ * Envía los días y horarios del formulario profesional heredado. La interfaz vigente usa
+ * saveAvailability, que además incluye jornada y fechas bloqueadas.
+ */
 async function saveMyAvailability(id) {
-  const days = Array.from(document.querySelectorAll('.svcDay:checked')).map(c => c.value);
+  const days = Array.from(document.querySelectorAll('.svcDay:checked')).map(/* Extrae c.value de cada elemento para formar la lista que necesita esta operación. */ c => c.value);
   const hoursRaw = document.getElementById('svcHours').value.trim();
-  const hours = hoursRaw ? hoursRaw.split(',').map(h => h.trim()).filter(Boolean) : [];
+  const hours = hoursRaw ? hoursRaw.split(',').map(/* Elimina espacios exteriores de cada valor antes de descartar entradas vacías o enviar los datos. */ h => h.trim()).filter(Boolean) : [];
   if (!days.length || !hours.length) { toast('Elige al menos un día y un horario'); return; }
   try {
     await fetch(`/api/professionals/${id}/self`, {
@@ -791,7 +1041,15 @@ async function saveMyAvailability(id) {
     await refreshAll(); toast('Disponibilidad actualizada'); renderDashboard();
   } catch (e) { console.error(e); toast('No se pudo guardar'); }
 }
+/**
+ * Envía límites y tiempos desde el panel profesional heredado. La interfaz vigente separa
+ * capacidad del profesional y duración de cada servicio.
+ */
 async function saveMyCapacity(id) {
+  /**
+   * Lee un campo numérico por id y devuelve null si está vacío o Number si tiene valor. null
+   * representa ausencia de límite en los formularios de capacidad.
+   */
   const val = (elId) => { const v = document.getElementById(elId).value; return v === '' ? null : Number(v); };
   try {
     await fetch(`/api/professionals/${id}/self`, {
@@ -804,6 +1062,10 @@ async function saveMyCapacity(id) {
     await refreshAll(); toast('Capacidad y duración actualizadas'); renderDashboard();
   } catch (e) { console.error(e); toast('No se pudo guardar'); }
 }
+/**
+ * Reenvía antecedentes del formulario heredado al perfil y refresca los datos. workspace.js
+ * sustituye la lectura de campos e incluye portafolio y motivación.
+ */
 async function resubmitValidation(id) {
   const validation = {
     linkedin: document.getElementById('rvLinkedin').value.trim(),
@@ -820,19 +1082,30 @@ async function resubmitValidation(id) {
     await refreshAll(); toast('Tus antecedentes fueron reenviados a Skilly para revisión'); renderDashboard();
   } catch (e) { console.error(e); toast('No se pudo reenviar'); }
 }
+/**
+ * Genera el historial heredado filtrando reservas por correo y usando estados antiguos.
+ * workspace.js lo reemplaza por datos autorizados en servidor y pestañas para organizaciones e
+ * invitados.
+ */
 function renderOrgDashboard(el) {
-  const myBookings = BOOKINGS.filter(b => b.orgEmail === SESSION.email).sort((a, b) => b.createdAt - a.createdAt);
+  const myBookings = BOOKINGS.filter(/* Conserva los elementos según la condición b.orgEmail === SESSION.email. Se evalúan los datos ya cargados. */ b => b.orgEmail === SESSION.email).sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
   // La identidad del profesional se revela recién cuando el pago ya se hizo
   // (no mientras la reserva está solo "reservada" y sin pagar).
+  /**
+   * Predicado del panel heredado que considera revelada la identidad si el estado no es reservado.
+   * No debe usarse como regla actual: bookingView del servidor decide según paid_at.
+   */
   const identityRevealed = (status) => !['reservado'].includes(status);
   el.innerHTML = `
     <div class="dashCard"><h3>${escapeHtml(SESSION.name)}</h3><p class="hint">${escapeHtml(SESSION.email)} · Organización</p></div>
     <div class="dashCard"><h3>Mis reservas</h3>
       ${myBookings.length ? myBookings.map(b => {
-        const payment = PAYMENTS.find(p => p.bookingId === b.id);
+        // Transforma cada registro en la estructura requerida por renderOrgDashboard, conservando su posición en el arreglo resultante.
+        
+        const payment = PAYMENTS.find(/* Busca el primer elemento según la condición p.bookingId === b.id. Se evalúan los datos ya cargados. */ p => p.bookingId === b.id);
         const canCancel = ['reservado', 'pagado', 'entregado'].includes(b.status);
         const revealed = identityRevealed(b.status);
-        const prof = PROFESSIONALS.find(p => p.id === b.professionalId);
+        const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === b.professionalId. Se evalúan los datos ya cargados. */ p => p.id === b.professionalId);
         return `<div class="miniRow">
           <div><b>${revealed ? escapeHtml(b.professionalName) : 'Profesional asignado (se revela al pagar)'}</b> — ${escapeHtml(b.service)}<br>
           <span class="hint">${escapeHtml(b.date)} · ${escapeHtml(b.time)} — ${escapeHtml(bookingStatusLabel(b.status))}${payment ? ` · ${fmtMoney(payment.amount)}` : ''}</span>
@@ -849,10 +1122,18 @@ function renderOrgDashboard(el) {
       }).join('') : '<p class="hint">Aún no tienes reservas. <a onclick="page(\'market\')" style="cursor:pointer;text-decoration:underline">Explora servicios</a>.</p>'}
     </div>`;
 }
+/**
+ * Localiza el pago y la reserva en memoria y delega en la versión vigente de downloadReceipt si
+ * ambos existen.
+ */
 function downloadReceiptFor(paymentId, bookingId) {
-  const p = PAYMENTS.find(x => x.id === paymentId); const b = BOOKINGS.find(x => x.id === bookingId);
+  const p = PAYMENTS.find(/* Busca el primer elemento según la condición x.id === paymentId. Se evalúan los datos ya cargados. */ x => x.id === paymentId); const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === bookingId. Se evalúan los datos ya cargados. */ x => x.id === bookingId);
   if (p && b) downloadReceipt(p, b);
 }
+/**
+ * Traduce los estados iniciales de reserva. workspace.js sustituye el mapa por uno que incluye
+ * solicitudes, confirmación, expiración y conciliación.
+ */
 function bookingStatusLabel(s) {
   return { reservado: 'Reservado, pendiente de pago', pagado: 'Pagado · servicio en curso', entregado: 'Entregado, esperando confirmación', completado: 'Completado y evaluado', cancelado: 'Cancelado' }[s] || s;
 }
@@ -861,7 +1142,15 @@ function bookingStatusLabel(s) {
 let adminTab = 'validaciones';
 let GUEST_REQUESTS = [];
 let ORGANIZATIONS = [];
-function setAdminTab(tab) { adminTab = tab; document.querySelectorAll('.adminTabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab)); renderAdmin(); }
+/**
+ * Selecciona una pestaña administrativa del diseño inicial. workspace.js reemplaza esta entrada
+ * para delegar en adminNavigate del menú lateral.
+ */
+function setAdminTab(tab) { adminTab = tab; document.querySelectorAll('.adminTabs button').forEach(/* Sincroniza la clase visual de cada control con la opción o sección actualmente seleccionada. */ b => b.classList.toggle('on', b.dataset.tab === tab)); renderAdmin(); }
+/**
+ * Distribuye las secciones administrativas tradicionales según adminTab. workspace.js conserva
+ * esta función como previousAdminRender para las secciones que reutiliza.
+ */
 function renderAdmin() {
   const el = document.getElementById('adminContent');
   if (!SESSION || SESSION.role !== 'admin') { el.innerHTML = `<div class="dashCard"><h3>Acceso restringido</h3><p class="hint">Esta sección es solo para administradores de Skilly.</p><button class="btn primary" onclick="openM('login');setLoginRole('admin')">Ingresar como administrador</button></div>`; return; }
@@ -875,18 +1164,34 @@ function renderAdmin() {
   if (adminTab === 'ajustes') return renderAdminSettings(el);
 }
 
+/**
+ * Consulta los indicadores administrativos y resuelve el JSON. Conserva una cabecera antigua sin
+ * efecto de autorización; el servidor vigente comprueba la cookie y el rol.
+ */
 async function fetchDashboardData() {
   const r = await fetch('/api/admin/dashboard', { headers: { 'x-admin-passcode': SESSION.adminPasscode || '' } });
   return r.json();
 }
 
+/**
+ * Carga el resumen administrativo y genera indicadores, barras por estado y proveedor y avisos
+ * de capacidad. Representa los agregados recibidos; algunos rótulos conservan referencias
+ * antiguas a liquidación simulada.
+ */
 async function renderBigDashboard() {
   const el = document.getElementById('bigDashboardContent');
   el.innerHTML = '<div class="loading">Cargando resumen...</div>';
   let d;
   try { d = await fetchDashboardData(); } catch (e) { el.innerHTML = '<div class="empty">No se pudo cargar el resumen.</div>'; return; }
 
+  /**
+   * Devuelve el HTML de una tarjeta de indicador con etiqueta, valor y texto secundario opcional.
+   */
   const kpi = (label, value, sub = '') => `<div class="kpiCard"><span class="kpiLabel">${label}</span><b class="kpiValue">${value}</b>${sub ? `<span class="kpiSub">${sub}</span>` : ''}</div>`;
+  /**
+   * Genera una barra cuyo ancho corresponde a value/total y evita dividir por cero. Utiliza la
+   * etiqueta y el color de presentación recibidos.
+   */
   const bar = (label, value, total, color) => `<div class="barRow"><span>${label}</span><div class="barTrack"><div class="barFill" style="width:${total ? (value / total * 100) : 0}%;background:${color}"></div></div><b>${value}</b></div>`;
 
   const bTotal = d.bookings.total || 1;
@@ -926,12 +1231,17 @@ async function renderBigDashboard() {
   `;
 }
 
+/**
+ * Consulta solicitudes invitadas y genera tarjetas con contacto, notas y responsable.
+ * workspace.js reutiliza este renderizador y agrega el envío al profesional cuando la reserva
+ * sigue en gestion_skilly.
+ */
 async function renderAdminGuestRequests(el) {
   el.innerHTML = '<div class="loading">Cargando solicitudes...</div>';
   try { GUEST_REQUESTS = await Api.adminGet('guest-requests'); } catch (e) { GUEST_REQUESTS = []; }
-  const arr = [...GUEST_REQUESTS].sort((a, b) => b.createdAt - a.createdAt);
+  const arr = [...GUEST_REQUESTS].sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
   if (!arr.length) { el.innerHTML = '<div class="empty">No hay solicitudes de organizaciones sin registro.</div>'; return; }
-  el.innerHTML = arr.map(g => `
+  el.innerHTML = arr.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ g => `
     <div class="dashCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div><h3>${escapeHtml(g.orgName)}</h3><p class="hint">Contacto: ${escapeHtml(g.contactName)} · ${escapeHtml(g.email)} ${g.phone ? '· ' + escapeHtml(g.phone) : ''}</p></div>
@@ -955,6 +1265,10 @@ async function renderAdminGuestRequests(el) {
       </div>
     </div>`).join('');
 }
+/**
+ * Guarda estado, notas y responsable de una solicitud invitada y recarga su listado. La API
+ * valida que descartar no omita la cancelación de una reserva ya tramitada.
+ */
 async function updateGuestRequest(id, status) {
   const notesEl = document.getElementById('gnotes-' + id);
   const assignedEl = document.getElementById('gassigned-' + id);
@@ -969,6 +1283,10 @@ async function updateGuestRequest(id, status) {
     toast('Solicitud actualizada'); renderAdminGuestRequests(document.getElementById('adminContent'));
   } catch (e) { console.error(e); toast(e.message || 'No se pudo actualizar'); }
 }
+/**
+ * Invoca la conversión heredada de una solicitud y refresca los datos. workspace.js reemplaza
+ * esta función para explicar el envío al profesional para aceptar o rechazar.
+ */
 async function convertGuestRequest(id) {
   try {
     const r = await fetch(`/api/admin/guest-requests/${id}/convert`, { method: 'POST', headers: { 'x-admin-passcode': SESSION.adminPasscode || '' } });
@@ -979,10 +1297,14 @@ async function convertGuestRequest(id) {
     renderAdminGuestRequests(document.getElementById('adminContent'));
   } catch (e) { console.error(e); toast(e.message || 'No se pudo convertir la solicitud'); }
 }
+/**
+ * Muestra perfiles pendientes o con información solicitada, ordenados del más antiguo al más
+ * reciente. Presenta antecedentes y controles para registrar la revisión.
+ */
 function renderAdminValidations(el) {
-  const pending = PROFESSIONALS.filter(p => p.status === 'pendiente' || p.status === 'info_solicitada').sort((a, b) => a.createdAt - b.createdAt);
+  const pending = PROFESSIONALS.filter(/* Conserva los elementos según la condición p.status === 'pendiente' || p.status === 'info_solicitada'. Se evalúan los datos ya cargados. */ p => p.status === 'pendiente' || p.status === 'info_solicitada').sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => a.createdAt - b.createdAt);
   if (!pending.length) { el.innerHTML = '<div class="empty">No hay solicitudes de validación pendientes.</div>'; return; }
-  el.innerHTML = pending.map(p => `
+  el.innerHTML = pending.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ p => `
     <div class="dashCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div><h3>${escapeHtml(p.name)}</h3><p class="hint">${escapeHtml(p.title)} · ${escapeHtml(p.category)} · ${escapeHtml(p.email)}</p></div>
@@ -1008,6 +1330,11 @@ function renderAdminValidations(el) {
       </div>
     </div>`).join('');
 }
+/**
+ * Recoge observaciones y responsable, exige una nota para rechazo o información faltante y envía
+ * la revisión del perfil. Actualiza la interfaz y comunica el resultado del intento de
+ * notificación.
+ */
 async function reviewProfessional(id, status) {
   const notesEl = document.getElementById('notes-' + id);
   const assignedEl = document.getElementById('assigned-' + id);
@@ -1022,11 +1349,17 @@ async function reviewProfessional(id, status) {
     renderAdmin();
   } catch (e) { console.error(e); toast('No se pudo actualizar'); }
 }
+/**
+ * Lista profesionales con estado, recomendación, promedio privado y capacidad. Las evaluaciones
+ * proceden de la API administrativa y no se publican en el catálogo.
+ */
 function renderAdminProfessionals(el) {
-  const arr = [...PROFESSIONALS].sort((a, b) => b.createdAt - a.createdAt);
+  const arr = [...PROFESSIONALS].sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
   el.innerHTML = `<div class="adminList">` + arr.map(p => {
-    const evals = EVALUATIONS.filter(e => e.professionalId === p.id);
-    const avg = evals.length ? (evals.reduce((s, e) => s + e.stars, 0) / evals.length).toFixed(1) : '—';
+    // Transforma cada registro en la estructura requerida por renderAdminProfessionals, conservando su posición en el arreglo resultante.
+    
+    const evals = EVALUATIONS.filter(/* Conserva los elementos según la condición e.professionalId === p.id. Se evalúan los datos ya cargados. */ e => e.professionalId === p.id);
+    const avg = evals.length ? (evals.reduce(/* Suma estrellas de evaluaciones privadas para calcular el promedio interno del profesional. */ (s, e) => s + e.stars, 0) / evals.length).toFixed(1) : '—';
     return `<div class="dashCard">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div><h3>${escapeHtml(p.name)}</h3><p class="hint">${escapeHtml(p.title)} · ${escapeHtml(p.category)} · prom. interno ${avg} (${evals.length} eval.)</p></div>
@@ -1049,7 +1382,15 @@ function renderAdminProfessionals(el) {
     </div>`;
   }).join('') + `</div>`;
 }
+/**
+ * Guarda límites diarios, semanales, mensuales y asignación del profesional desde
+ * administración. Los campos vacíos se envían como null para quitar el límite.
+ */
 async function saveProfessionalCapacity(id) {
+  /**
+   * Lee un campo numérico por id y devuelve null si está vacío o Number si tiene valor. null
+   * representa ausencia de límite en los formularios de capacidad.
+   */
   const val = (elId) => { const v = document.getElementById(elId).value; return v === '' ? null : Number(v); };
   try {
     await Api.update('professionals', id, {
@@ -1059,15 +1400,23 @@ async function saveProfessionalCapacity(id) {
     await refreshAll(); toast('Capacidad actualizada'); renderAdmin();
   } catch (e) { console.error(e); toast('No se pudo actualizar'); }
 }
+/**
+ * Actualiza el indicador de recomendación editorial del profesional y refresca el panel. No
+ * cambia su validación ni aprueba un servicio pendiente.
+ */
 async function toggleRecommended(id, val) {
   try { await Api.update('professionals', id, { recommended: val }, true); await refreshAll(); renderAdmin(); }
   catch (e) { console.error(e); toast('No se pudo actualizar'); }
 }
+/**
+ * Ordena y muestra evaluaciones privadas con estrellas, comentario, organización y fecha para el
+ * equipo Skilly.
+ */
 function renderAdminEvaluations(el) {
-  const arr = [...EVALUATIONS].sort((a, b) => b.createdAt - a.createdAt);
+  const arr = [...EVALUATIONS].sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
   if (!arr.length) { el.innerHTML = '<div class="empty">Aún no hay evaluaciones registradas.</div>'; return; }
   el.innerHTML = `<p class="hint" style="margin-bottom:14px">Estas evaluaciones son privadas: el servidor solo las entrega a peticiones autenticadas de administrador. Sirven como argumento interno para decidir qué profesionales destacar (campo "Recomendado"), sin exponer un ranking público de estrellas.</p>` +
-    `<div class="adminList">` + arr.map(e => `
+    `<div class="adminList">` + arr.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ e => `
     <div class="adminRow" style="grid-template-columns:1.4fr 2fr .6fr 1fr">
       <div><b>${escapeHtml(e.professionalName)}</b><small>Evaluado por ${escapeHtml(e.orgName)}</small></div>
       <div><small>${escapeHtml(e.comment)}</small></div>
@@ -1075,11 +1424,17 @@ function renderAdminEvaluations(el) {
       <div><small>${new Date(e.createdAt).toLocaleDateString('es-CL')}</small></div>
     </div>`).join('') + `</div>`;
 }
+/**
+ * Genera el listado administrativo heredado de pagos. El renderAdmin vigente usa paymentCards y
+ * el panel de operaciones para conciliación y liquidaciones.
+ */
 function renderAdminPayments(el) {
-  const arr = [...PAYMENTS].sort((a, b) => b.createdAt - a.createdAt);
+  const arr = [...PAYMENTS].sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
   if (!arr.length) { el.innerHTML = '<div class="empty">Aún no hay pagos registrados.</div>'; return; }
   el.innerHTML = `<div class="adminList">` + arr.map(p => {
-    const b = BOOKINGS.find(x => x.id === p.bookingId);
+    // Transforma los estados o valores del resultado para compararlos con lo esperado por la prueba.
+    
+    const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === p.bookingId. Se evalúan los datos ya cargados. */ x => x.id === p.bookingId);
     return `<div class="adminRow">
       <div><b>${escapeHtml(p.professionalName)}</b><small>${escapeHtml(p.orgName)} · N° ${escapeHtml(p.invoiceNumber)}</small></div>
       <div><small>${b ? escapeHtml(b.date) + ' · ' + escapeHtml(b.time) : ''}</small></div>
@@ -1097,6 +1452,10 @@ let calendarMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 let calendarSelectedDay = null;
 let calendarProfFilter = '';
 
+/**
+ * Desplaza el mes del calendario heredado y limpia la selección diaria. El calendario vigente
+ * usa calendarMove y su propio estado.
+ */
 function shiftMonth(delta) {
   const [y, m] = calendarMonth.split('-').map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -1104,8 +1463,16 @@ function shiftMonth(delta) {
   calendarSelectedDay = null;
   renderAdminCalendar(document.getElementById('adminContent'));
 }
+/**
+ * Cambia el filtro del calendario antiguo y lo redibuja. La interfaz vigente usa calProfessional
+ * dentro de renderCalendar.
+ */
 function setCalendarProfFilter(id) { calendarProfFilter = id; renderAdminCalendar(document.getElementById('adminContent')); }
 
+/**
+ * Construye el calendario mensual heredado y su detalle por día. workspace.js reemplaza la
+ * función por el calendario compartido con vistas mensual, semanal y diaria.
+ */
 function renderAdminCalendar(el) {
   const [year, month] = calendarMonth.split('-').map(Number);
   const firstDay = new Date(year, month - 1, 1);
@@ -1113,11 +1480,13 @@ function renderAdminCalendar(el) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const monthLabel = firstDay.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
 
-  const relevantBookings = BOOKINGS.filter(b => (!calendarProfFilter || b.professionalId === calendarProfFilter) && b.status !== 'cancelado');
+  const relevantBookings = BOOKINGS.filter(/* Conserva los elementos según la condición (!calendarProfFilter || b.professionalId === calendarProfFilter) && b.status !== 'cancelado'. Se evalúan los datos ya cargados. */ b => (!calendarProfFilter || b.professionalId === calendarProfFilter) && b.status !== 'cancelado');
   const countsByDay = {};
-  relevantBookings.forEach(b => { countsByDay[b.date] = (countsByDay[b.date] || 0) + 1; });
+  relevantBookings.forEach(b => {
+    // Incrementa el contador de reservas de cada fecha para dibujar el calendario heredado.
+     countsByDay[b.date] = (countsByDay[b.date] || 0) + 1; });
 
-  const profOptions = PROFESSIONALS.map(p => `<option value="${p.id}" ${calendarProfFilter === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
+  const profOptions = PROFESSIONALS.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ p => `<option value="${p.id}" ${calendarProfFilter === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
 
   let cells = '';
   for (let i = 0; i < startOffset; i++) cells += `<div class="calCell calCell-empty"></div>`;
@@ -1156,12 +1525,20 @@ function renderAdminCalendar(el) {
   if (calendarSelectedDay) renderCalendarDayDetail();
 }
 
+/**
+ * Guarda el día elegido en el calendario heredado y vuelve a dibujarlo. El calendario actual
+ * maneja calDate y calendarMode.
+ */
 function selectCalendarDay(dateStr) { calendarSelectedDay = dateStr; renderAdminCalendar(document.getElementById('adminContent')); }
 
+/**
+ * Dibuja reservas y alternativas horarias del día en el calendario antiguo. No es la validación
+ * definitiva de agenda; la implementación vigente usa renderCalendar y la API.
+ */
 function renderCalendarDayDetail() {
   const el = document.getElementById('calDayDetail');
-  const dayBookings = BOOKINGS.filter(b => b.date === calendarSelectedDay && (!calendarProfFilter || b.professionalId === calendarProfFilter))
-    .sort((a, b) => a.time.localeCompare(b.time));
+  const dayBookings = BOOKINGS.filter(/* Conserva los elementos según la condición b.date === calendarSelectedDay && (!calendarProfFilter || b.professionalId === calendarProfFilter). Se evalúan los datos ya cargados. */ b => b.date === calendarSelectedDay && (!calendarProfFilter || b.professionalId === calendarProfFilter))
+    .sort(/* Ordena las reservas por su hora HH:mm para presentarlas cronológicamente dentro del día. */ (a, b) => a.time.localeCompare(b.time));
   const dateLabel = new Date(calendarSelectedDay + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
 
   if (!dayBookings.length) { el.innerHTML = `<div class="dashCard"><h3 style="text-transform:capitalize">${dateLabel}</h3><p class="hint">No hay reservas este día.</p></div>`; return; }
@@ -1170,10 +1547,12 @@ function renderCalendarDayDetail() {
     <div class="dashCard">
       <h3 style="text-transform:capitalize">${dateLabel}</h3>
       ${dayBookings.map(b => {
-        const prof = PROFESSIONALS.find(p => p.id === b.professionalId);
+        // Transforma cada registro en la estructura requerida por renderCalendarDayDetail, conservando su posición en el arreglo resultante.
+        
+        const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === b.professionalId. Se evalúan los datos ya cargados. */ p => p.id === b.professionalId);
         const hours = prof?.availability?.hours || [];
-        const taken = BOOKINGS.filter(x => x.professionalId === b.professionalId && x.date === b.date && x.status !== 'cancelado' && x.id !== b.id).map(x => x.time);
-        const freeHours = hours.filter(h => !taken.includes(h));
+        const taken = BOOKINGS.filter(/* Conserva los elementos según la condición x.professionalId === b.professionalId && x.date === b.date && x.status !== 'cancelado' && x.id !== b.id. Se evalúan los datos ya cargados. */ x => x.professionalId === b.professionalId && x.date === b.date && x.status !== 'cancelado' && x.id !== b.id).map(/* Extrae x.time de cada elemento para formar la lista que necesita esta operación. */ x => x.time);
+        const freeHours = hours.filter(/* Conserva los elementos según la condición !taken.includes(h). Se evalúan los datos ya cargados. */ h => !taken.includes(h));
         return `
         <div class="miniRow" style="flex-direction:column;align-items:stretch;gap:8px">
           <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -1183,7 +1562,7 @@ function renderCalendarDayDetail() {
           ${b.status !== 'cancelado' && b.status !== 'completado' ? `
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <select id="resched-${b.id}">
-              ${freeHours.map(h => `<option value="${h}" ${h === b.time ? 'selected' : ''}>${h}</option>`).join('')}
+              ${freeHours.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ h => `<option value="${h}" ${h === b.time ? 'selected' : ''}>${h}</option>`).join('')}
             </select>
             <button class="btn small outline" onclick="rescheduleBooking('${b.id}')">Cambiar horario</button>
             <button class="btn small danger" onclick="openCancelModal('${b.id}', true)">Cancelar</button>
@@ -1193,6 +1572,10 @@ function renderCalendarDayDetail() {
     </div>`;
 }
 
+/**
+ * Envía una nueva hora desde el selector del calendario antiguo. workspace.js reemplaza esta
+ * función por un modal que permite cambiar fecha y hora.
+ */
 async function rescheduleBooking(bookingId) {
   const sel = document.getElementById('resched-' + bookingId);
   const newTime = sel.value;
@@ -1205,10 +1588,14 @@ async function rescheduleBooking(bookingId) {
 }
 
 /* ---------------- Cancelación con devolución (% configurable) ---------------- */
+/**
+ * Calcula la devolución visual del prototipo con el porcentaje global. policies.js sustituye
+ * esta función y consulta la política congelada de la reserva al servidor.
+ */
 function openCancelModal(bookingId, fromAdmin = false) {
-  const b = BOOKINGS.find(x => x.id === bookingId);
+  const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === bookingId. Se evalúan los datos ya cargados. */ x => x.id === bookingId);
   if (!b) return;
-  const payment = PAYMENTS.find(p => p.bookingId === bookingId && (p.status === 'pagado' || p.status === 'liberado'));
+  const payment = PAYMENTS.find(/* Busca el primer elemento según la condición p.bookingId === bookingId && (p.status === 'pagado' || p.status === 'liberado'). Se evalúan los datos ya cargados. */ p => p.bookingId === bookingId && (p.status === 'pagado' || p.status === 'liberado'));
   const pct = SERVER_CONFIG.cancellationRefundPercent ?? 80;
   const refundPreview = payment ? Math.round(payment.amount * (pct / 100)) : 0;
   const box = document.getElementById('cancelBookingBox');
@@ -1226,6 +1613,10 @@ function openCancelModal(bookingId, fromAdmin = false) {
     <button class="btn danger full" id="cancelConfirmBtn" onclick="confirmCancelBooking('${bookingId}', ${fromAdmin})">Confirmar cancelación</button>`;
   openM('cancelBooking');
 }
+/**
+ * Envía la cancelación desde el modal antiguo y actualiza el listado. policies.js reemplaza esta
+ * función e incorpora el porcentaje administrativo cuando corresponde.
+ */
 async function confirmCancelBooking(bookingId, fromAdmin) {
   const reason = document.getElementById('cancelReason').value.trim();
   const btn = document.getElementById('cancelConfirmBtn'); btn.disabled = true; btn.textContent = 'Procesando...';
@@ -1248,11 +1639,15 @@ async function confirmCancelBooking(bookingId, fromAdmin) {
 }
 
 /* ---------------- Seguimiento de organizaciones/clientes ---------------- */
+/**
+ * Consulta el informe de organizaciones y dibuja indicadores e historial desplegable por correo
+ * de contacto.
+ */
 async function renderAdminOrganizations(el) {
   el.innerHTML = '<div class="loading">Cargando organizaciones...</div>';
   try { ORGANIZATIONS = await Api.adminGet('organizations'); } catch (e) { ORGANIZATIONS = []; }
   if (!ORGANIZATIONS.length) { el.innerHTML = '<div class="empty">Aún no hay organizaciones con reservas registradas.</div>'; return; }
-  el.innerHTML = ORGANIZATIONS.map((o, i) => `
+  el.innerHTML = ORGANIZATIONS.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ (o, i) => `
     <div class="dashCard">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
         <div><h3>${escapeHtml(o.orgName)}</h3><p class="hint">${escapeHtml(o.orgEmail)}</p></div>
@@ -1265,16 +1660,24 @@ async function renderAdminOrganizations(el) {
         <div class="kpiCard"><span class="kpiLabel">Total pagado</span><b class="kpiValue" style="font-size:18px">${fmtMoney(o.totalPagado)}</b></div>
       </div>
       <div id="orgHistory-${i}" style="display:none;margin-top:12px">
-        ${o.historial.map(b => `<div class="miniRow"><div><b>${escapeHtml(b.professionalName)}</b> — ${escapeHtml(b.service)}<br><span class="hint">${escapeHtml(b.date)} · ${escapeHtml(b.time)} — ${escapeHtml(bookingStatusLabel(b.status))}</span></div></div>`).join('')}
+        ${o.historial.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ b => `<div class="miniRow"><div><b>${escapeHtml(b.professionalName)}</b> — ${escapeHtml(b.service)}<br><span class="hint">${escapeHtml(b.date)} · ${escapeHtml(b.time)} — ${escapeHtml(bookingStatusLabel(b.status))}</span></div></div>`).join('')}
       </div>
     </div>`).join('');
 }
+/**
+ * Alterna la visibilidad del historial de la organización indicada por su posición en el
+ * listado.
+ */
 function toggleOrgHistory(i) {
   const el = document.getElementById('orgHistory-' + i);
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 /* ---------------- Ajustes operativos ---------------- */
+/**
+ * Carga el formulario inicial de capacidad y cancelación. workspace.js sustituye esta versión y
+ * añade comisión general y plazos de respuesta y pago.
+ */
 async function renderAdminSettings(el) {
   el.innerHTML = '<div class="loading">Cargando ajustes...</div>';
   let s;
@@ -1294,6 +1697,10 @@ async function renderAdminSettings(el) {
     <button class="btn primary" onclick="saveSettings()">Guardar ajustes</button>
   `;
 }
+/**
+ * Envía los dos ajustes del formulario heredado y recarga configuración pública. workspace.js
+ * reemplaza la función para guardar también comisiones y plazos.
+ */
 async function saveSettings() {
   try {
     await fetch('/api/admin/settings', {
@@ -1312,6 +1719,10 @@ async function saveSettings() {
 let chatBookingId = null;
 let chatPollTimer = null;
 
+/**
+ * Abre el chat heredado y comienza consultas cada cuatro segundos. workspace.js reemplaza la
+ * construcción del modal, conservando el mismo temporizador compartido.
+ */
 function openChat(bookingId) {
   chatBookingId = bookingId;
   renderChat();
@@ -1319,15 +1730,23 @@ function openChat(bookingId) {
   clearInterval(chatPollTimer);
   chatPollTimer = setInterval(renderChat, 4000); // refresco simple cada 4s mientras está abierto
 }
+/**
+ * Cierra el modal y cancela el sondeo periódico de mensajes para evitar consultas cuando la
+ * conversación ya no está visible.
+ */
 function closeChat() {
   closeM('chat');
   clearInterval(chatPollTimer);
   chatPollTimer = null;
 }
 
+/**
+ * Reconstruye la conversación heredada a partir de la API. workspace.js sustituye esta función
+ * para mantener el campo de escritura y respetar la posición de lectura.
+ */
 async function renderChat() {
   if (!chatBookingId || !document.getElementById('chat').classList.contains('show')) return;
-  const b = BOOKINGS.find(x => x.id === chatBookingId);
+  const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === chatBookingId. Se evalúan los datos ya cargados. */ x => x.id === chatBookingId);
   if (!b) return;
   let messages = [];
   try { messages = await Api.list(`bookings/${chatBookingId}/messages`); } catch (e) { /* silencioso, se reintenta en el próximo poll */ }
@@ -1342,7 +1761,7 @@ async function renderChat() {
     <small>CHAT DE LA RESERVA</small><h2>Conversación con ${escapeHtml(otherLabel)}</h2>
     <p class="hint">${escapeHtml(b.date)} · ${escapeHtml(b.time)} — ${escapeHtml(b.service)}</p>
     <div id="chatMessages" class="chatMessages">
-      ${messages.length ? messages.map(m => `
+      ${messages.length ? messages.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ m => `
         <div class="chatMsg ${m.senderRole === myRole ? 'chatMsg-mine' : ''}">
           <span class="chatMsgMeta">${m.senderRole === 'admin' ? 'Skilly' : escapeHtml(m.senderName || (m.senderRole === 'organizacion' ? 'Organización' : 'Profesional'))} · ${new Date(m.createdAt).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
           <div class="chatMsgBody">${escapeHtml(m.body)}</div>
@@ -1356,6 +1775,10 @@ async function renderChat() {
   if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
 }
 
+/**
+ * Envía el mensaje con campos de remitente del cliente heredado. workspace.js lo reemplaza y
+ * solo envía el cuerpo; el servidor determina autor y rol.
+ */
 async function sendChatMessage() {
   const input = document.getElementById('chatInput');
   const body = input.value.trim();
@@ -1368,4 +1791,4 @@ async function sendChatMessage() {
   } catch (e) { console.error(e); toast('No se pudo enviar el mensaje'); }
 }
 
-document.addEventListener('DOMContentLoaded', () => skillyInit());
+document.addEventListener('DOMContentLoaded', /* Inicia skillyInit cuando el DOM está disponible y ya se cargaron las capas que reemplazan las funciones heredadas. */ () => skillyInit());

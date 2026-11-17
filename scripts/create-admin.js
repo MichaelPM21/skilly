@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Alta local del primer administrador: aplica migración, solicita
+ * nombre/correo, genera contraseña si no se suministra y guarda su hash. No reemplaza una cuenta
+ * existente ni crea una clave compartida.
+ */
+
 require('dotenv').config();
 const readline = require('node:readline/promises');
 const {
@@ -8,6 +14,8 @@ const {
 } = require('../server/db');
 const S = require('../server/security');
 (async () => {
+  // Ejecuta el alta administrativa local completa y cierra lectura de terminal y base cuando termina correctamente.
+  
   await migrate();
   const rl = readline.createInterface({
     input: process.stdin,
@@ -26,6 +34,8 @@ const S = require('../server/security');
   rl.close();
   await db.close();
 })().catch(e => {
+  // Registra el error recibido y conserva el indicador de fallo del script o propaga el error al siguiente manejador.
+  
   console.error(e.message);
   process.exit(1);
 });

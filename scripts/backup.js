@@ -1,6 +1,16 @@
+/**
+ * Flujo del módulo. Respaldo PostgreSQL mediante pg_dump en formato custom. No realiza
+ * exportación SQLite ni incluye archivos externos a la base.
+ */
+
 require('dotenv').config();
 const fs=require('node:fs'),path=require('node:path');
 const {pgTool}=require('./postgres-tools');
+/**
+ * Crea la carpeta de respaldos y ejecuta pg_dump en formato custom con un nombre fechado. Usa
+ * BACKUP_DIR o .local/backups y, si existe PGSCHEMA, limita el respaldo a ese esquema; devuelve
+ * la ruta del archivo.
+ */
 async function backup(){
   const dir=path.resolve(process.env.BACKUP_DIR||path.join(__dirname,'../.local/backups'));
   fs.mkdirSync(dir,{recursive:true});
@@ -11,5 +21,7 @@ async function backup(){
   console.log('Respaldo PostgreSQL guardado en: '+destination);
   return destination;
 }
-if(require.main===module)backup().catch(error=>{console.error('No se pudo respaldar PostgreSQL:',error.message);process.exitCode=1;});
+if(require.main===module)backup().catch(error=>{
+  // Registra el error recibido y conserva el indicador de fallo del script o propaga el error al siguiente manejador.
+  console.error('No se pudo respaldar PostgreSQL:',error.message);process.exitCode=1;});
 module.exports={backup};

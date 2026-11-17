@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Ejecuta comprobación sintáctica y suites, guarda salida TAP e informe de
+ * resultados locales. No equipara porcentaje de casos aprobados con cobertura, usabilidad o
+ * validación real de proveedores.
+ */
+
 // Store actual runner output. A failed run is recorded and keeps a nonzero exit code.
 const fs=require('node:fs');
 const path=require('node:path');
@@ -5,17 +11,21 @@ const {spawnSync}=require('node:child_process');
 const root=path.join(__dirname,'..');
 const directory=path.join(root,'.local','test-results');
 fs.mkdirSync(directory,{recursive:true});
-const files=fs.readdirSync(path.join(root,'tests')).filter(f=>f.endsWith('.test.js')).sort().map(f=>'tests/'+f);
+const files=fs.readdirSync(path.join(root,'tests')).filter(/* Conserva los elementos según la condición f.endsWith('.test.js'). Se evalúan los datos ya cargados. */ f=>f.endsWith('.test.js')).sort().map(/* Transforma cada elemento con 'tests/'+f para construir la colección utilizada por esta operación. */ f=>'tests/'+f);
 const check=spawnSync(process.execPath,['scripts/check.js'],{cwd:root,encoding:'utf8',windowsHide:true});
 const run=spawnSync(process.execPath,['--test','--test-reporter=tap',...files],{cwd:root,encoding:'utf8',windowsHide:true,maxBuffer:10*1024*1024});
 const output=(run.stdout||'')+(run.stderr||'');
 fs.writeFileSync(path.join(directory,'pruebas.tap'),output);
 fs.writeFileSync(path.join(directory,'sintaxis.txt'),(check.stdout||'')+(check.stderr||''));
+/**
+ * Extrae un contador numérico de la salida TAP mediante su nombre, devolviendo cero si no
+ * aparece. Alimenta el informe de pruebas, no un cálculo de cobertura de código.
+ */
 const stat=name=>Number(output.match(new RegExp('^# '+name+' ([0-9.]+)$','m'))?.[1]||0);
 const tests=stat('tests'),passed=stat('pass'),failed=stat('fail');
 const commit=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8',windowsHide:true});
 const date=new Date().toLocaleString('es-CL',{timeZone:'America/Santiago',hour12:false});
-const rows=[...output.matchAll(/^(ok|not ok) \d+ - (.+)$/gm)].map(m=>'| '+m[2].replaceAll('|','\\|')+' | Pasa | '+(m[1]==='ok'?'Pasa':'Falla')+' |');
+const rows=[...output.matchAll(/^(ok|not ok) \d+ - (.+)$/gm)].map(/* Transforma cada elemento con '| '+m[2].replaceAll('|','\\|')+' | Pasa | '+(m[1]==='ok'?'Pasa':'Falla')+' |' para construir la colección utilizada por esta operación. */ m=>'| '+m[2].replaceAll('|','\\|')+' | Pasa | '+(m[1]==='ok'?'Pasa':'Falla')+' |');
 const md=`# Resultados automatizados\n\nEjecución: ${date} (America/Santiago). Node ${process.version}; ${process.platform}/${process.arch}.\n\nCommit base: ${commit.stdout.trim()||'no disponible'}. La ejecución incluye los cambios locales de esta entrega; no afirma que estén publicados.\n\n| Métrica | Esperado | Obtenido |\n|---|---|---|\n| Sintaxis | Salida 0 | ${check.status} |\n| Casos ejecutados | Suite completa | ${tests} |\n| Casos aprobados | ${tests} | ${passed} |\n| Fallos | 0 | ${failed} |\n| Omitidos | 0 | ${stat('skipped')} |\n| Cancelados | 0 | ${stat('cancelled')} |\n| Éxito de casos ejecutados | 100 % | ${tests?(100*passed/tests).toFixed(1):'No medido'} % |\n| Duración de la suite | Diagnóstico, sin umbral de producción | ${stat('duration_ms')} ms |\n\nEste porcentaje no mide cobertura de código, usabilidad ni funcionamiento real de los proveedores. Las pruebas HTTP usan puertos locales y esquemas PostgreSQL temporales en una base terminada en _test; proveedores y SMTP están controlados en los casos de integración.\n\n| Caso | Esperado | Obtenido |\n|---|---|---|\n${rows.join('\n')}\n\nSalida íntegra: [pruebas.tap](pruebas.tap). Comprobación sintáctica: [sintaxis.txt](sintaxis.txt).\n`;
 fs.writeFileSync(path.join(directory,'resultados.md'),md);
 console.log(check.stdout||check.stderr||check.error||'');

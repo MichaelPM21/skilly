@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Módulo heredado de correo directo, conservado en el repositorio. No está
+ * requerido por el servidor vigente: los flujos actuales usan notifications.js y outbox. Sus
+ * textos de publicación y registro describen una versión anterior.
+ */
+
 // ============================================================
 // Notificaciones por correo a Skilly (Gmail)
 // ------------------------------------------------------------
@@ -25,6 +31,10 @@
 const nodemailer = require('nodemailer');
 
 let transporter = null;
+/**
+ * Crea y reutiliza un transporte Gmail si hay credenciales, o devuelve null. Este módulo es
+ * heredado; el flujo actual usa notifications.js y su cola persistente.
+ */
 function getTransporter() {
   if (transporter) return transporter;
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return null;
@@ -38,10 +48,18 @@ function getTransporter() {
   return transporter;
 }
 
+/**
+ * Indica si existen las dos variables de Gmail, sin probar su validez. Esta utilidad pertenece
+ * al módulo de correo heredado.
+ */
 function isConfigured() {
   return !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
 }
 
+/**
+ * Construye texto y HTML para avisar a Skilly de una solicitud invitada y los envía directamente
+ * por Gmail. Resuelve sent/reason; no participa en la cola actual ni en sus reintentos.
+ */
 async function sendGuestRequestEmail(request) {
   const t = getTransporter();
   if (!t) {
@@ -98,6 +116,11 @@ Gestiona esta solicitud desde el panel de administración de Skilly, pestaña "S
   }
 }
 
+/**
+ * Construye el aviso de aprobación, rechazo o información faltante y lo envía directamente. Es
+ * una implementación heredada: la revisión actual usa notifications.js y separa perfil de
+ * publicación.
+ */
 async function sendProfessionalStatusEmail(professional) {
   const t = getTransporter();
   if (!t) {
@@ -131,8 +154,12 @@ async function sendProfessionalStatusEmail(professional) {
   }
 }
 
+/**
+ * Escapa caracteres con significado en HTML al interpolar datos en las plantillas heredadas de
+ * correo.
+ */
 function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s ?? '').replace(/[&<>"']/g, /* Sustituye cada carácter especial por su entidad HTML para interpolar texto sin convertirlo en etiquetas. */ c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 module.exports = { sendGuestRequestEmail, sendProfessionalStatusEmail, isConfigured };
