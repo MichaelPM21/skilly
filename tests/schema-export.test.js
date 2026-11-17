@@ -28,12 +28,12 @@ test('Exported academic scripts create and remove PostgreSQL keys and tables in 
  await db.transaction(async()=>{
   await db.exec('CREATE SCHEMA '+schema);
   await db.exec('SET LOCAL search_path='+schema);
-  for(const name of ['01-tablas.sql','02-claves-primarias.sql','03-claves-foraneas.sql','04-indices.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../docs/entrega3/base-datos',name),'utf8'));
+  for(const name of ['01-tablas.sql','02-claves-primarias.sql','03-claves-foraneas.sql','04-indices.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../database/schema-exports',name),'utf8'));
   assert.equal((await db.query("SELECT count(*) n FROM pg_constraint WHERE contype='f' AND connamespace=current_schema()::regnamespace")).rows[0].n,22);
   assert.equal((await db.query("SELECT count(*) n FROM pg_constraint WHERE contype='p' AND connamespace=current_schema()::regnamespace")).rows[0].n,20);
-  await db.exec(fs.readFileSync(path.join(__dirname,'../docs/entrega3/base-datos/90-eliminar-claves-foraneas.sql'),'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname,'../database/schema-exports/90-eliminar-claves-foraneas.sql'),'utf8'));
   assert.equal((await db.query("SELECT count(*) n FROM pg_constraint WHERE contype='f' AND connamespace=current_schema()::regnamespace")).rows[0].n,0);
-  await db.exec(fs.readFileSync(path.join(__dirname,'../docs/entrega3/base-datos/99-eliminar-tablas.sql'),'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname,'../database/schema-exports/99-eliminar-tablas.sql'),'utf8'));
   assert.equal((await db.query('SELECT count(*) n FROM pg_tables WHERE schemaname=current_schema()')).rows[0].n,0);
   await db.exec('DROP SCHEMA '+schema);
  }).immediate();

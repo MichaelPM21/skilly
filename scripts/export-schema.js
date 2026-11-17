@@ -3,11 +3,12 @@ require('dotenv').config();
 const fs=require('node:fs'),path=require('node:path');
 const {db}=require('../server/db');
 async function exportSchema(){
- const out=path.join(__dirname,'../docs/entrega3/base-datos');fs.mkdirSync(out,{recursive:true});
+ const out=path.join(__dirname,'../database/schema-exports');fs.mkdirSync(out,{recursive:true});
+ const reports=path.join(__dirname,'../.local/schema-docs');fs.mkdirSync(reports,{recursive:true});
  const sql=fs.readFileSync(path.join(__dirname,'../database/postgres/001-initial.sql'),'utf8');
  const statements=sql.replace(/^--.*$/gm,'').split(';').map(s=>s.trim()).filter(Boolean);
  const warning='-- PostgreSQL. Scripts académicos para una base DESECHABLE; no ejecutar DROP sobre la base de trabajo.\n';
- const write=(file,content)=>fs.writeFileSync(path.join(out,file),content,'utf8');
+ const write=(file,content)=>fs.writeFileSync(path.join(file.endsWith('.sql')?out:reports,file),content,'utf8');
  const tables=(await db.query("SELECT tablename FROM pg_tables WHERE schemaname=current_schema() ORDER BY tablename")).rows.map(r=>r.tablename);
  const constraints=(await db.query("SELECT c.conname,c.contype,c.conrelid::regclass::text AS table_name,pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c WHERE c.connamespace=current_schema()::regnamespace ORDER BY c.conrelid::regclass::text,c.conname")).rows;
  const fks=(await db.query("SELECT tc.table_name,kcu.column_name,ccu.table_name AS referenced_table,ccu.column_name AS referenced_column FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name=kcu.constraint_name AND tc.constraint_schema=kcu.constraint_schema JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name=ccu.constraint_name AND tc.constraint_schema=ccu.constraint_schema WHERE tc.constraint_type='FOREIGN KEY' AND tc.constraint_schema=current_schema() ORDER BY tc.table_name,kcu.column_name")).rows;

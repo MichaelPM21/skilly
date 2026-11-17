@@ -11,3 +11,8 @@ server/skilly.db-shm
 *.db-wal
 *.db-shm
 .env.*.local
+
+# Informes y evidencias locales; el repositorio conserva codigo y pruebas.
+/docs/entrega3/
+/docs/informe/
+/scripts/security-evidence.py

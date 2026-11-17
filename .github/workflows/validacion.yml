@@ -5,6 +5,21 @@ permissions:
 jobs:
   pruebas:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: skilly_ci
+          POSTGRES_PASSWORD: skilly_ci_ephemeral
+          POSTGRES_DB: skilly_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skilly_ci -d skilly_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://skilly_ci:skilly_ci_ephemeral@127.0.0.1:5432/skilly_test
+      TEST_DATABASE_URL: postgresql://skilly_ci:skilly_ci_ephemeral@127.0.0.1:5432/skilly_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -12,11 +27,20 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: PostgreSQL 18 client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+          echo "PG_BIN=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
+      - run: npm run db:migrate
       - run: npm run db:docs
-      - run: git diff --exit-code -- docs/entrega3/base-datos
+      - run: git diff --exit-code -- database/schema-exports
       - run: npm run test:evidence
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: resultados-de-pruebas
-          path: docs/entrega3/evidencias/
+          path: .local/test-results/
+          include-hidden-files: true

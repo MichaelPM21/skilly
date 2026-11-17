@@ -1,6 +1,6 @@
 # Skilly · Aplicaciones pública y administrativa
 
-La [carpeta de Entrega 3](docs/entrega3/README.md) contiene trazabilidad con la rúbrica, requisitos y casos de uso, modelos y scripts PostgreSQL, seguridad, plan de pruebas, resultados y pendientes humanos. Ejecuta `npm run test:evidence` para actualizar las evidencias y `npm run db:docs` para actualizar el diccionario desde los metadatos de PostgreSQL.
+Ejecuta `npm run check` y `npm test` para validar el código. `npm run test:evidence` guarda resultados locales en `.local/test-results/`. `npm run db:docs` exporta los scripts SQL a `database/schema-exports/` y la documentación generada a `.local/schema-docs/`. Los informes y las evidencias no se versionan.
 
 > Actualización: consultar [Políticas y operación](POLITICAS_IMPLEMENTADAS.md) para reclamos, cancelaciones, mediación y transferencias externas. Esta actualización sustituye las indicaciones anteriores sobre liquidación exclusivamente simulada y ausencia de reintentos de correo.
 
@@ -156,7 +156,7 @@ npm test
 npm audit
 ~~~
 
-Las pruebas usan bases temporales y no modifican server/skilly.db. Cubren permisos, identidad, moderación, comisiones, agenda, invitados, documentos, incidencias, recuperación, pagos repetidos/tardíos, migración y respaldo.
+Las pruebas usan esquemas temporales en la base PostgreSQL indicada por TEST_DATABASE_URL, cuyo nombre debe terminar en _test. No modifican la base de trabajo. Cubren permisos, identidad, moderación, comisiones, agenda, invitados, documentos, incidencias, recuperación, pagos repetidos/tardíos, migración y respaldo.
 
 ## Problemas habituales
 
