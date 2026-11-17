@@ -1,9 +1,19 @@
+/**
+ * Flujo del módulo. Control del menú de la aplicación administrativa. Se carga después de
+ * workspace.js y usa sus utilidades y adminItems. Combina botones, arrastre y teclado en
+ * escritorio con un cajón accesible en móvil.
+ */
+
 const railMin = 56;
 const railMax = 240;
 const railMobileQuery = matchMedia('(max-width: 760px)');
 let railWidth = railMax;
 let railDrawerOpen = false;
 
+/**
+ * Sincroniza ancho, modo compacto o cajón móvil, fondo y atributos ARIA con el estado del menú.
+ * En móvil cerrado aplica inert para evitar foco en controles ocultos.
+ */
 function renderRail() {
   const rail = $('sideRail');
   const mobile = railMobileQuery.matches;
@@ -22,6 +32,10 @@ function renderRail() {
   $('railTip').hidden = true;
 }
 
+/**
+ * Muestra u oculta la barra según la sesión administrativa, limpia el cajón al salir y actualiza
+ * el diseño.
+ */
 function updateRailSession(signedIn) {
   $('sideRail').hidden = !signedIn;
   document.body.classList.toggle('hasAdminRail', signedIn);
@@ -29,6 +43,10 @@ function updateRailSession(signedIn) {
   renderRail();
 }
 
+/**
+ * Alterna entre 56 y 240 píxeles en escritorio o abre/cierra el cajón móvil. En móvil mueve el
+ * foco al botón visible apropiado.
+ */
 function toggleRail() {
   if (railMobileQuery.matches) {
     railDrawerOpen = !railDrawerOpen;
@@ -40,6 +58,10 @@ function toggleRail() {
   }
 }
 
+/**
+ * Selecciona la sección administrativa, cierra el cajón móvil y actualiza la página y
+ * aria-current de los botones.
+ */
 function adminNavigate(section) {
   adminSection = section;
   adminTab = section;
@@ -53,6 +75,11 @@ function adminNavigate(section) {
   }
 }
 
+/**
+ * Construye los botones de adminItems y conecta navegación, ayudas, arrastre, teclado y cambios
+ * de tamaño. El menú actual se contrae con botón/arrastre; pointerover muestra ayudas en modo
+ * compacto, no abre automáticamente todo el panel.
+ */
 function buildSidebar() {
   const rail = $('sideRail');
   const nav = $('sideNav');
@@ -67,9 +94,13 @@ function buildSidebar() {
       button.classList.add('on');
       button.setAttribute('aria-current', 'page');
     }
-    button.addEventListener('click', () => adminNavigate(id));
+    button.addEventListener('click', /* Abre la sección asociada al botón del menú administrativo. */ () => adminNavigate(id));
     nav.append(button);
   }
+  /**
+   * Muestra la etiqueta del botón bajo el puntero o foco cuando el menú está compacto,
+   * posicionándola junto al botón.
+   */
   function showTip(event) {
     const button = event.target.closest('button');
     if (!button || !rail.classList.contains('compact')) return;
@@ -81,39 +112,56 @@ function buildSidebar() {
   nav.addEventListener('pointerover', showTip);
   nav.addEventListener('focusin', showTip);
   for (const name of ['pointerleave', 'focusout', 'scroll']) {
-    nav.addEventListener(name, () => { $('railTip').hidden = true; });
+    nav.addEventListener(name, () => {
+      // Oculta la ayuda flotante al abandonar el menú, perder foco o desplazar su contenido.
+       $('railTip').hidden = true; });
   }
+  /**
+   * Limita el ancho solicitado al intervalo 56–240 píxeles, lo redondea y actualiza el menú.
+   */
   function resizeRail(width) {
     railWidth = Math.round(Math.max(railMin, Math.min(railMax, width)));
     renderRail();
   }
   grip.addEventListener('pointerdown', event => {
+    // Captura el puntero principal para arrastrar el borde del menú y activa el estado visual de redimensionamiento.
+    
     if (event.button !== 0) return;
     grip.setPointerCapture(event.pointerId);
     document.body.classList.add('resizingRail');
   });
   grip.addEventListener('pointermove', event => {
+    // Ajusta el ancho mientras el control conserva la captura del puntero.
+    
     if (grip.hasPointerCapture(event.pointerId)) resizeRail(event.clientX - rail.getBoundingClientRect().left);
   });
-  grip.addEventListener('lostpointercapture', () => document.body.classList.remove('resizingRail'));
+  grip.addEventListener('lostpointercapture', /* Limpia el estado de redimensionamiento cuando termina la captura del puntero. */ () => document.body.classList.remove('resizingRail'));
   grip.addEventListener('dblclick', toggleRail);
   grip.addEventListener('keydown', event => {
+    // Permite redimensionar con flechas, Home y End, evitando el comportamiento predeterminado de esas teclas.
+    
     const widths = {Home: railMin, End: railMax, ArrowLeft: railWidth - 16, ArrowRight: railWidth + 16};
     if (!(event.key in widths)) return;
     event.preventDefault();
     resizeRail(widths[event.key]);
   });
-  railMobileQuery.addEventListener('change', () => { railDrawerOpen = false; renderRail(); });
+  railMobileQuery.addEventListener('change', () => {
+    // Reinicia el cajón móvil y recalcula el menú al cambiar el tamaño de pantalla.
+     railDrawerOpen = false; renderRail(); });
   document.addEventListener('keydown', event => {
+    // Cierra el cajón móvil con Escape cuando está abierto.
+    
     if (event.key === 'Escape' && railDrawerOpen) toggleRail();
   });
   document.addEventListener('focusin', event => {
+    // Cierra el cajón cuando el foco pasa fuera del menú y del botón móvil.
+    
     if (railDrawerOpen && !rail.contains(event.target) && event.target !== $('railMobile')) {
       railDrawerOpen = false;
       renderRail();
     }
   });
   const header = document.querySelector('header.nav');
-  new ResizeObserver(() => document.body.style.setProperty('--header-height', header.offsetHeight + 'px')).observe(header);
+  new ResizeObserver(/* Actualiza la altura CSS del encabezado cuando cambia su tamaño, manteniendo alineado el menú lateral. */ () => document.body.style.setProperty('--header-height', header.offsetHeight + 'px')).observe(header);
   renderRail();
 }

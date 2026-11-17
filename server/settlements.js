@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Devoluciones y liquidación externa. Cancelar registra primero una operación,
+ * luego llama al proveedor y concilia su resultado. Una orden de payout registra trabajo
+ * administrativo: la transferencia bancaria se realiza fuera de Skilly.
+ */
+
 const {
   db
 } = require('./db');
@@ -14,8 +20,15 @@ const {
   refundPercent
 } = require('./policies');
 const notify = require('./notifications');
+/**
+ * Registra de forma atómica una devolución ya confirmada, actualiza pago y notificaciones y,
+ * salvo cobros tardíos, cancela la reserva. Guarda el remanente como pendiente de acuerdo, sin
+ * convertirlo automáticamente en comisión o liquidación.
+ */
 async function finish(op, reference) {
   await db.transaction(async () => {
+    // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+    
     const b = await db.prepare('SELECT * FROM bookings WHERE id=?').get(op.booking_id);
     await db.prepare("UPDATE refund_operations SET status='completado',reference=? WHERE id=?").run(reference, op.id);
     if (op.kind !== 'tardio') await db.prepare("UPDATE bookings SET status='cancelado',refund_amount=?,refund_percent=?,cancelled_at=?,cancel_reason=?,cancellation_status=NULL,retained_amount=?,retention_destination=? WHERE id=?").run(op.amount, op.percent, Date.now(), op.reason, op.payment_id ? Math.max(0, b.amount - op.amount) : 0, op.payment_id && op.amount < b.amount ? 'pendiente_acuerdo' : 'sin_retencion', b.id);
@@ -23,7 +36,17 @@ async function finish(op, reference) {
     await notify.booking(b, 'Cancelación y devolución registradas', `${b.id}: devolución ${op.amount} CLP. Motivo: ${op.reason}`, 'refund:' + op.id);
   }).immediate();
 }
+/**
+ * Registra cotización de cancelación, devolución y conciliación manual, además de órdenes y
+ * confirmaciones de transferencias externas. Valida conformidad, reclamos, importe y
+ * comprobante; registrar una transferencia no la ejecuta en el banco.
+ */
 function routes(app) {
+  /**
+   * GET /api/bookings/:id/cancellation-quote. Devuelve porcentaje y monto de devolución voluntaria
+   * calculados con la política guardada y el momento actual. No cancela ni garantiza que la
+   * operación esté habilitada.
+   */
   app.get('/api/bookings/:id/cancellation-quote', wrap(async (req, res) => {
     const b = await access(req, req.params.id);
     res.json({
@@ -31,9 +54,17 @@ function routes(app) {
       amount: b.paid_at ? Math.round(b.amount * refundPercent(b) / 100) : 0
     });
   }));
+  /**
+   * POST /api/bookings/:id/cancel. Valida actor, estado, casos y operaciones pendientes; fija
+   * monto y registra una devolución en proceso bajo transacción. Llama al proveedor fuera de ella
+   * y confirma con finish o bloquea para conciliación; incumplimiento profesional aprobado fuerza
+   * devolución total.
+   */
   app.post('/api/bookings/:id/cancel', wrap(async (req, res) => {
     let op, payment;
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const b = await access(req, req.params.id),
         admin = req.user.role === 'admin';
       if (admin) S.admin(req);else await customer(req, b);
@@ -88,15 +119,24 @@ function routes(app) {
       });
     } catch {
       await db.transaction(async () => {
+        // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+        
         await db.prepare("UPDATE refund_operations SET status='revision' WHERE id=?").run(op.id);
         await db.prepare("UPDATE bookings SET cancellation_status='revision' WHERE id=?").run(op.booking_id);
       }).immediate();
       S.fail(502, 'Devolución pendiente de conciliación. No se repetirá el cobro ni la devolución automáticamente.');
     }
   }));
+  /**
+   * POST /api/admin/refunds/:id/reconcile. Registra evidencia y referencia verificadas de una
+   * devolución incierta. Confirma con finish o marca no_ejecutado y desbloquea según el tipo; no
+   * vuelve a llamar al proveedor.
+   */
   app.post('/api/admin/refunds/:id/reconcile', wrap(async (req, res) => {
     S.admin(req);
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const op = await db.prepare("SELECT * FROM refund_operations WHERE id=? AND status='revision'").get(req.params.id);
       if (!op) S.fail(409, 'Operación no pendiente.');
       const reference = text(req.body.reference || '', 200),
@@ -115,9 +155,16 @@ function routes(app) {
       ok: true
     });
   }));
+  /**
+   * POST /api/admin/bookings/:id/payout. Crea una única orden de transferencia externa por el neto
+   * contractual si hay pago no simulado, conformidad y ausencia de casos o cancelaciones. No
+   * inicia un movimiento bancario.
+   */
   app.post('/api/admin/bookings/:id/payout', wrap(async (req, res) => {
     S.admin(req);
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const b = await access(req, req.params.id);
       if (b.status !== 'confirmado' || b.cancellation_status || (await db.prepare("SELECT 1 FROM incidents WHERE booking_id=? AND status<>'resuelta'").get(b.id))) S.fail(409, 'Falta conformidad o hay un reclamo/cancelación pendiente.');
       const p = await db.prepare("SELECT * FROM payments WHERE booking_id=? AND status='pagado'").get(b.id);
@@ -131,9 +178,16 @@ function routes(app) {
       message: 'Orden registrada. Realiza y verifica la transferencia fuera de Skilly antes de confirmarla.'
     });
   }));
+  /**
+   * POST /api/admin/payouts/:id/confirm. Exige orden pendiente, importe exacto, referencia
+   * bancaria única y adjunto de esa reserva. Registra la transferencia externa verificada,
+   * completa la reserva y marca el pago liberado.
+   */
   app.post('/api/admin/payouts/:id/confirm', wrap(async (req, res) => {
     S.admin(req);
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const p = await db.prepare("SELECT * FROM payouts WHERE id=? AND status='pendiente_transferencia'").get(req.params.id);
       if (!p) S.fail(409, 'Liquidación no pendiente.');
       const b = await access(req, p.booking_id);
@@ -152,11 +206,17 @@ function routes(app) {
       ok: true
     });
   }));
+  /**
+   * POST /api/admin/payouts/:id/void. Elimina una orden todavía pendiente solo con evidencia de
+   * que no se transfirió y deja auditoría. No anula una transferencia bancaria realizada.
+   */
   app.post('/api/admin/payouts/:id/void', wrap(async (req, res) => {
     S.admin(req);
     const evidence = text(req.body.evidence || '', 4000);
     if (!evidence) S.fail(400, 'Documenta la confirmación bancaria de que no se transfirió.');
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const p = await db.prepare("SELECT * FROM payouts WHERE id=? AND status='pendiente_transferencia'").get(req.params.id);
       if (!p) S.fail(409, 'Orden no pendiente.');
       await db.prepare('DELETE FROM payouts WHERE id=?').run(p.id);

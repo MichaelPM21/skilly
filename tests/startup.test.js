@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Pruebas de migración concurrente, alta administrativa y
+ * respaldo/restauración en PostgreSQL de prueba. Requieren pg_dump/pg_restore; la eliminación
+ * del esquema se limita al creado por postgres-helper.
+ */
+
 const {test,before,after}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
@@ -7,11 +13,19 @@ const pgTest=require('./postgres-helper');
 const {db}=require('../server/db');
 const {pgTool}=require('../scripts/postgres-tools');
 before(pgTest.setup);after(pgTest.cleanup);
+/**
+ * Lanza dos procesos de migración sobre el mismo esquema temporal y comprueba que solo se
+ * registre una migración inicial.
+ */
 test('Both processes initialize the same PostgreSQL schema without duplicate migrations',async()=>{
- const results=await Promise.allSettled([0,1].map(()=>run(process.execPath,['-e',"require('./server/schema').migrate().finally(()=>require('./server/db').db.close())"],{cwd:path.join(__dirname,'..'),env:process.env,windowsHide:true})));
+ const results=await Promise.allSettled([0,1].map(/* Transforma cada registro en la estructura requerida por la inicialización del módulo, conservando su posición en el arreglo resultante. */ ()=>run(process.execPath,['-e',"require('./server/schema').migrate().finally(()=>require('./server/db').db.close())"],{cwd:path.join(__dirname,'..'),env:process.env,windowsHide:true})));
  for(const result of results)if(result.status==='rejected')throw result.reason;
  assert.equal((await db.prepare("SELECT count(*) n FROM schema_migrations WHERE version LIKE 'postgres-001-%'").get()).n,1);
 });
+/**
+ * Crea un administrador de prueba, respalda y restaura el esquema temporal con herramientas
+ * PostgreSQL. Verifica que sobrevivan la cuenta y las claves foráneas.
+ */
 test('Administrator setup and PostgreSQL backup restore preserve accounts and constraints',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'skilly-pg-backup-'));
  try{

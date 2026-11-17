@@ -1,5 +1,20 @@
+/**
+ * Flujo del módulo. Validación pura de contacto, reutilizada por actualización de perfil y
+ * pruebas. No lee ni escribe la base: el llamador persiste únicamente cuando todas las
+ * validaciones terminan.
+ */
+
 // Optional contact fields are validated before any profile change is persisted.
+/**
+ * Valida los campos opcionales de contacto antes de persistir el perfil. Normaliza teléfono,
+ * calcula el dígito verificador del RUT chileno y recorta la dirección; devuelve phone, rut y
+ * address o lanza Error.
+ */
 function contactProfile(body) {
+  /**
+   * Lee un campo opcional del cuerpo, exige texto dentro del máximo y elimina espacios exteriores.
+   * Usa cadena vacía cuando el dato no fue proporcionado.
+   */
   function field(name, max) {
     const value = body[name] ?? '';
     if (typeof value !== 'string' || value.length > max) throw new Error('Revisa el campo ' + name + '.');
@@ -19,7 +34,9 @@ function contactProfile(body) {
     if (!/^\d{7,8}[\dK]$/.test(compact) || /^0+$/.test(compact.slice(0, -1))) throw new Error('Revisa el RUT y su dígito verificador.');
     const digits = compact.slice(0, -1);
     let sum = 0;
-    [...digits].reverse().forEach((digit, i) => { sum += Number(digit) * (2 + i % 6); });
+    [...digits].reverse().forEach((digit, i) => {
+      // Aplica los factores cíclicos de 2 a 7 a los dígitos del RUT invertido para calcular su verificador.
+       sum += Number(digit) * (2 + i % 6); });
     const remainder = 11 - sum % 11;
     const check = remainder === 11 ? '0' : remainder === 10 ? 'K' : String(remainder);
     if (compact.at(-1) !== check) throw new Error('El dígito verificador del RUT no coincide.');

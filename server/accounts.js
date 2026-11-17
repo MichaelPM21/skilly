@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Cuentas y sesiones: registro → correo de verificación → acceso por cookie.
+ * El registro profesional guarda usuario, perfil y primer servicio pendientes; recuperación e
+ * invitaciones consumen tokens. Los invitados acceden a una sola reserva.
+ */
+
 const {
   db
 } = require('./db');
@@ -6,16 +12,33 @@ const notify = require('./notifications');
 const {
   validateAvailability
 } = require('./scheduling');
-const wrap = fn => (req, res, next) => Promise.resolve().then(() => fn(req, res)).catch(next);
+/**
+ * Adapta una función asíncrona de ruta a Express. Captura tanto excepciones síncronas como
+ * rechazos y los entrega a next para conservar el formato común de error.
+ */
+const wrap = fn => /* Devuelve el middleware de Express que ejecuta fn con req/res y deriva cualquier error a next. */ (req, res, next) => Promise.resolve().then(/* Devuelve el middleware de Express que ejecuta fn con req/res y deriva cualquier error a next. */ () => fn(req, res)).catch(next);
+/**
+ * Normaliza el correo a minúsculas sin espacios exteriores y valida formato básico y longitud
+ * máxima de 254 caracteres. Lanza un error HTTP 400 si no cumple.
+ */
 const email = value => {
   const v = String(value || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || v.length > 254) S.fail(400, 'Correo inválido.');
   return v;
 };
+/**
+ * Exige una cadena dentro del tamaño máximo y devuelve su contenido sin espacios exteriores. La
+ * obligatoriedad del texto debe comprobarla el llamador.
+ */
 const text = (v, max = 1000) => {
   if (typeof v !== 'string' || v.length > max) S.fail(400, 'Texto inválido o demasiado largo.');
   return v.trim();
 };
+/**
+ * Normaliza enlaces de LinkedIn, agregando HTTPS a los que comienzan por su dominio. Rechaza
+ * otros dominios, protocolos, credenciales embebidas y URLs excesivas con un mensaje de
+ * validación.
+ */
 function linkedin(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
   try {
@@ -26,13 +49,30 @@ function linkedin(value) {
     S.fail(400, 'Revisa el enlace de LinkedIn. Ejemplo: https://www.linkedin.com/in/tu-usuario');
   }
 }
+/**
+ * Registra registro, ingreso, sesiones, verificación, recuperación, perfil y accesos invitados.
+ * La cuenta profesional crea perfil y primer servicio en una transacción; las rutas
+ * administrativas gestionan invitaciones y auditoría.
+ */
 function authRoutes(app) {
+  /**
+   * Obtiene la URL de la aplicación actual para construir enlaces de correo. Usa ADMIN_URL para
+   * administración y BASE_URL para el sitio público, con valores locales por defecto.
+   */
   const base = () => app.locals.kind === 'admin' ? process.env.ADMIN_URL || 'http://localhost:3001' : process.env.BASE_URL || 'http://localhost:3000';
+  /**
+   * GET /api/auth/me. Devuelve la cuenta de la sesión o el alcance del invitado; sin autenticación
+   * responde null. No envía contraseñas ni tokens.
+   */
   app.get('/api/auth/me', (req, res) => res.json(req.user?.role === 'invitado' ? {
     role: 'invitado',
     guestBookingId: req.user.guestBookingId,
     name: 'Invitado'
   } : S.publicUser(req.user) || null));
+  /**
+   * POST /api/auth/login. Valida correo, contraseña y aplicación correspondiente al rol. Crea la
+   * cookie de sesión y audita el ingreso; limita intentos y devuelve la cuenta pública.
+   */
   app.post('/api/auth/login', wrap(async (req, res) => {
     S.rateLimit(req, 'login');
     const u = await db.prepare('SELECT * FROM users WHERE lower(email)=lower(?) AND active=1').get(String(req.body.email || '').toLowerCase());
@@ -45,6 +85,10 @@ function authRoutes(app) {
     }, 'login', u.id);
     res.json(S.publicUser(u));
   }));
+  /**
+   * POST /api/auth/logout. Elimina la sesión identificada por la cookie y solicita borrarla del
+   * navegador. Devuelve ok aunque no hubiera sesión vigente.
+   */
   app.post('/api/auth/logout', wrap(async (req, res) => {
     await db.prepare('DELETE FROM sessions WHERE token_hash=?').run(S.hash(S.tokenFrom(req)));
     res.clearCookie(S.cookieName(req), {
@@ -54,6 +98,11 @@ function authRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * POST /api/auth/register. Valida nombre, correo, rol y contraseña; para profesionales crea
+   * perfil y primer servicio dentro de una transacción. Inicia sesión y envía verificación,
+   * manteniendo perfil y publicación pendientes.
+   */
   app.post('/api/auth/register', wrap(async (req, res) => {
     if (app.locals.kind === 'admin') S.fail(403, 'Los administradores crean las cuentas desde su panel.');
     S.rateLimit(req, 'register', 10);
@@ -68,6 +117,8 @@ function authRoutes(app) {
       uid = S.id('usr');
     let pid = null;
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       if (b.role === 'profesional') {
         const v = b.validation;
         if (!v?.linkedin || !v?.cv || !v?.yearsExperience) S.fail(400, 'Completa LinkedIn, experiencia y antecedentes.');
@@ -90,8 +141,14 @@ function authRoutes(app) {
     await notify.send(mail, 'Confirma tu correo en Skilly', `Abre este enlace para verificar tu correo: ${base()}/#verify=${token}`);
     res.status(201).json(S.publicUser(await db.prepare('SELECT * FROM users WHERE id=?').get(uid)));
   }));
+  /**
+   * POST /api/auth/verify. Valida y consume el token de verificación en una transacción. Marca el
+   * correo verificado y vincula historial importado no invitado por ese correo a una organización.
+   */
   app.post('/api/auth/verify', wrap(async (req, res) => {
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const t = await S.useToken(req.body.token, 'verify');
       const u = await db.prepare('SELECT * FROM users WHERE id=?').get(t.subject);
       await db.prepare('UPDATE users SET verified=1 WHERE id=?').run(u.id);
@@ -103,6 +160,11 @@ function authRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * POST /api/auth/forgot. Emite un enlace de recuperación de 30 minutos si la cuenta activa
+   * pertenece a esta aplicación. Siempre responde un mensaje genérico para no revelar existencia
+   * de cuentas.
+   */
   app.post('/api/auth/forgot', wrap(async (req, res) => {
     S.rateLimit(req, 'recovery', 5);
     const mail = email(req.body.email);
@@ -116,10 +178,17 @@ function authRoutes(app) {
       message: 'Si existe una cuenta, recibirás un enlace de recuperación.'
     });
   }));
+  /**
+   * POST /api/auth/reset. Valida contraseña y token de recuperación, verifica la aplicación,
+   * actualiza el hash y consume el enlace. Marca correo verificado y revoca sesiones anteriores de
+   * la cuenta.
+   */
   app.post('/api/auth/reset', wrap(async (req, res) => {
     S.rateLimit(req, 'reset', 10);
     const hashed = await S.passwordHash(req.body.password);
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const t = await S.useToken(req.body.token, 'reset');
       const u = await db.prepare('SELECT * FROM users WHERE id=?').get(t.subject);
       if (!u || app.locals.kind === 'admin' !== (u.role === 'admin')) S.fail(400, 'Enlace inválido para este acceso.');
@@ -132,6 +201,10 @@ function authRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * PATCH /api/auth/profile. Valida nombre y contacto antes de actualizar users y, cuando
+   * corresponde, el nombre del perfil profesional. No cambia correo ni rol.
+   */
   app.patch('/api/auth/profile', wrap(async (req, res) => {
     S.requireRole(req, 'organizacion', 'profesional', 'admin');
     const name = text(req.body.name, 160);
@@ -146,10 +219,19 @@ function authRoutes(app) {
     if (req.user.professional_id) await db.prepare('UPDATE professionals SET name=? WHERE id=?').run(name, req.user.professional_id);
     res.json(S.publicUser(await db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id)));
   }));
+  /**
+   * GET /api/admin/users. Exige administración y lista cuentas usando publicUser, excluyendo
+   * hashes de contraseña.
+   */
   app.get('/api/admin/users', wrap(async (req, res) => {
     S.admin(req);
     res.json((await db.prepare('SELECT * FROM users ORDER BY created_at DESC').all()).map(S.publicUser));
   }));
+  /**
+   * POST /api/admin/users. Crea una cuenta administrativa o habilita un perfil profesional
+   * heredado sin cuenta. Envía un enlace para elegir contraseña, rechaza correos existentes y
+   * registra auditoría.
+   */
   app.post('/api/admin/users', wrap(async (req, res) => {
     S.admin(req);
     const mail = email(req.body.email),
@@ -171,19 +253,34 @@ function authRoutes(app) {
       emailSent: sent
     });
   }));
+  /**
+   * GET /api/admin/audit. Devuelve hasta 200 eventos recientes de auditoría únicamente al
+   * administrador.
+   */
   app.get('/api/admin/audit', wrap(async (req, res) => {
     S.admin(req);
     res.json(await db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT 200').all());
   }));
+  /**
+   * GET /api/admin/outbox. Permite al administrador consultar hasta 100 correos de prueba,
+   * incluidos sus enlaces. Responde 404 cuando NODE_ENV es production.
+   */
   app.get('/api/admin/outbox', wrap(async (req, res) => {
     S.admin(req);
     if (process.env.NODE_ENV === 'production') S.fail(404, 'No disponible.');
     res.json(await db.prepare('SELECT * FROM outbox ORDER BY id DESC LIMIT 100').all());
   }));
+  /**
+   * POST /api/guest/access. Canjea un token invitado vigente por una sesión limitada a su reserva
+   * y marca el enlace usado dentro de la transacción. No está disponible desde la aplicación
+   * administrativa.
+   */
   app.post('/api/guest/access', wrap(async (req, res) => {
     if (app.locals.kind === 'admin') S.fail(403, 'Utiliza Skilly.');
     S.rateLimit(req, 'guest-access');
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const t = await S.useToken(req.body.token, 'guest');
       await S.session(req, res, null, t.subject);
       await db.prepare('UPDATE access_tokens SET used_at=? WHERE token_hash=?').run(Date.now(), t.token_hash);
@@ -192,6 +289,10 @@ function authRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * POST /api/guest/recover. Verifica en privado reserva invitada y correo y, si coinciden, envía
+   * otro enlace. Devuelve respuesta genérica y limita intentos.
+   */
   app.post('/api/guest/recover', wrap(async (req, res) => {
     S.rateLimit(req, 'guest-recover', 5);
     const mail = email(req.body.email);
@@ -203,6 +304,11 @@ function authRoutes(app) {
     });
   }));
 }
+/**
+ * Emite un token de invitado válido por 48 horas y encola/envía el enlace de una reserva
+ * concreta. Resuelve si se confirmó el envío SMTP; el acceso posterior crea una sesión limitada
+ * a esa reserva.
+ */
 async function guestLink(b) {
   const token = await S.issueToken('guest', b.id, 48 * 3600000);
   return await notify.send(b.org_email, 'Tu reserva en Skilly', `Reserva ${b.id}\nServicio: ${b.service}\nAccede de forma segura: ${process.env.BASE_URL || 'http://localhost:3000'}/#guest=${token}\nEnlace de un uso, válido por 48 horas. Puedes solicitar uno nuevo con tu correo y el número de reserva.`);

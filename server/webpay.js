@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Adaptador del SDK Transbank para crear, confirmar, consultar y devolver
+ * transacciones. WEBPAY_ENV selecciona integración o producción; payments.js y settlements.js
+ * controlan estado local, autorización y conciliación.
+ */
+
 // ============================================================
 // Integración de pago real — Webpay Plus (Transbank)
 // ------------------------------------------------------------
@@ -22,6 +28,10 @@
 
 const { WebpayPlus, IntegrationCommerceCodes, IntegrationApiKeys } = require('transbank-sdk');
 
+/**
+ * Construye el cliente del SDK para integración o producción según WEBPAY_ENV. Producción exige
+ * credenciales propias; integración usa las constantes de prueba del SDK.
+ */
 function buildTransaction() {
   const isProd = process.env.WEBPAY_ENV === 'production';
   if (isProd) {
@@ -35,10 +45,18 @@ function buildTransaction() {
 }
 
 // Webpay exige un buyOrder de máximo 26 caracteres.
+/**
+ * Genera una orden alfanumérica prefijada con SK y limitada a 26 caracteres. La usa
+ * createTransaction para asociar el intento enviado a Webpay.
+ */
 function toBuyOrder(bookingId) {
   return ('SK' + bookingId.replace(/[^a-zA-Z0-9]/g, '')).slice(0, 26);
 }
 
+/**
+ * Inicia una transacción Webpay por importe CLP y URL de retorno. Devuelve token, URL, orden y
+ * sesión; todavía no confirma el cobro.
+ */
 async function createTransaction({ bookingId, amount, returnUrl }) {
   const tx = buildTransaction();
   const buyOrder = toBuyOrder(bookingId);
@@ -48,6 +66,10 @@ async function createTransaction({ bookingId, amount, returnUrl }) {
   return { token: response.token, url: response.url, buyOrder, sessionId };
 }
 
+/**
+ * Confirma el token ante Webpay y devuelve la respuesta del SDK. payments.js comprueba
+ * autorización, código, monto y orden antes de modificar la reserva.
+ */
 async function commitTransaction(token) {
   const tx = buildTransaction();
   // response incluye: status ('AUTHORIZED', 'FAILED', etc.), response_code (0 = aprobado),
@@ -56,6 +78,10 @@ async function commitTransaction(token) {
   return tx.commit(token);
 }
 
+/**
+ * Solicita al SDK la devolución del importe indicado para un token. Devuelve la respuesta de
+ * Webpay; el llamador valida el resultado y gestiona respuestas inciertas.
+ */
 async function refundTransaction(token, amount) {
   const tx = buildTransaction();
   // response incluye: type ('REVERSED' si se anula completa dentro de ventana, 'NULLIFIED'/'VOID'
@@ -63,6 +89,10 @@ async function refundTransaction(token, amount) {
   return tx.refund(token, amount);
 }
 
+/**
+ * Consulta el estado del token ante Webpay sin iniciar un pago nuevo. Se utiliza en conciliación
+ * administrativa.
+ */
 async function statusTransaction(token) { return buildTransaction().status(token); }
 
 module.exports = { statusTransaction, createTransaction, commitTransaction, refundTransaction, toBuyOrder };

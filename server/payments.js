@@ -1,3 +1,9 @@
+/**
+ * Flujo del módulo. Cobros del cliente: validar reserva y términos → crear intento → llamar a
+ * pasarela → verificar retorno → settle. Reserva y pago tienen estados separados. Cobros tardíos
+ * van a revisión; una marca pagado no es una transferencia al profesional.
+ */
+
 const {
   db,
   getSettings
@@ -15,6 +21,11 @@ const {
 const {
   expire
 } = require('./scheduling');
+/**
+ * Convierte una fila de payments al contrato público de pagos y comprobantes. Excluye tokens
+ * internos y claves de operación; el listado aplica después la ocultación de identidad antes del
+ * pago.
+ */
 function paymentView(p) {
   return {
     id: p.id,
@@ -37,6 +48,11 @@ function paymentView(p) {
     refundAmount: p.refund_amount
   };
 }
+/**
+ * Exige reserva aceptada vigente, cliente propietario, condiciones aceptadas y ausencia de
+ * reclamo o pago activo. Inserta un intento con el monto contractual y registra versión de
+ * términos; se ejecuta bajo transacción antes de llamar a la pasarela.
+ */
 async function prepare(req, provider) {
   await expire();
   const b = await access(req, req.body.bookingId);
@@ -57,8 +73,15 @@ async function prepare(req, provider) {
     id
   };
 }
+/**
+ * Confirma atómicamente un cobro verificado, registra comprobante y autorización y marca la
+ * reserva pagada si todavía corresponde. Las respuestas repetidas no duplican efectos; un cobro
+ * tardío queda en revisión sin recuperar el horario.
+ */
 async function settle(paymentId, details) {
   return await db.transaction(async () => {
+    // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+    
     const p = await db.prepare('SELECT * FROM payments WHERE id=?').get(paymentId);
     if (['pagado', 'liberado', 'reembolsado'].includes(p.status)) return 'success';
     const b = await db.prepare('SELECT * FROM bookings WHERE id=?').get(p.booking_id);
@@ -69,14 +92,33 @@ async function settle(paymentId, details) {
     return late ? 'review' : 'success';
   }).immediate();
 }
+/**
+ * Registra pagos simulados, creación y retornos de Webpay/PayPal, conciliación, devolución
+ * tardía y liberación simulada. Delega cancelaciones y transferencias externas en settlements;
+ * las llamadas a proveedores quedan fuera de las transacciones críticas.
+ */
 function paymentsRoutes(app) {
+  /**
+   * Devuelve los adaptadores de pasarela inyectados en app.locals para pruebas o los módulos
+   * reales de Webpay y PayPal.
+   */
   const providers = () => app.locals.providers || {
     webpay: require('./webpay'),
     paypal: require('./paypal')
   };
+  /**
+   * Obtiene la URL pública de retorno de las pasarelas a partir de BASE_URL, con localhost:3000
+   * como valor local.
+   */
   const base = () => process.env.BASE_URL || 'http://localhost:3000';
+  /**
+   * Reúne pagos de las reservas permitidas a la sesión, adapta sus campos y elimina identidad
+   * profesional para clientes cuya reserva aún no tiene pago confirmado. Responde un arreglo JSON.
+   */
   async function paymentList(req, res) {
-    res.json((await Promise.all((await listBookings(req)).map(async b => (await db.prepare('SELECT * FROM payments WHERE booking_id=? ORDER BY created_at DESC').all(b.id)).map(p => {
+    res.json((await Promise.all((await listBookings(req)).map(/* Obtiene y transforma cada registro de forma asíncrona; el llamador reúne los resultados con Promise.all. */ async b => (await db.prepare('SELECT * FROM payments WHERE booking_id=? ORDER BY created_at DESC').all(b.id)).map(p => {
+      // Transforma cada registro en la estructura requerida por paymentList, conservando su posición en el arreglo resultante.
+      
       const v = paymentView(p);
       if (!b.paid_at && !['admin', 'profesional'].includes(req.user?.role)) {
         delete v.professionalName;
@@ -86,25 +128,38 @@ function paymentsRoutes(app) {
     })))).flat());
   }
   app.get('/api/payments', wrap(paymentList));
+  /**
+   * GET /api/admin/payments. Exige administrador y utiliza el mismo listado de pagos sobre todas
+   * las reservas visibles a su rol.
+   */
   app.get('/api/admin/payments', wrap(async (req, res) => {
     S.admin(req);
     await paymentList(req, res);
   }));
+  /**
+   * POST /api/payments. Crea y confirma un pago simulado fuera de producción, después de validar
+   * reserva y consentimiento. No contacta bancos ni proveedores.
+   */
   app.post('/api/payments', wrap(async (req, res) => {
     if (process.env.NODE_ENV === 'production') S.fail(403, 'El pago simulado solo está disponible en pruebas.');
     const {
       id
-    } = await db.transaction(async () => await prepare(req, 'simulado')).immediate();
+    } = await db.transaction(/* Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT. */ async () => await prepare(req, 'simulado')).immediate();
     await settle(id, {
       authorization: 'SIMULADO'
     });
     res.status(201).json(paymentView(await db.prepare('SELECT * FROM payments WHERE id=?').get(id)));
   }));
+  /**
+   * POST /api/payments/webpay/create. Reserva el intento de pago bajo transacción y después llama
+   * a Webpay con el monto contractual. Guarda token y orden; un fallo incierto deja revision para
+   * impedir cobros duplicados.
+   */
   app.post('/api/payments/webpay/create', wrap(async (req, res) => {
     const {
       b,
       id
-    } = await db.transaction(async () => await prepare(req, 'webpay')).immediate();
+    } = await db.transaction(/* Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT. */ async () => await prepare(req, 'webpay')).immediate();
     try {
       const r = await providers().webpay.createTransaction({
         bookingId: id,
@@ -121,10 +176,20 @@ function paymentsRoutes(app) {
       S.fail(502, 'No se pudo verificar la creación del pago. Skilly debe revisar el intento antes de repetirlo.');
     }
   }));
+  /**
+   * ALL /api/payments/webpay/commit. Procesa el retorno Webpay por GET o POST, localiza el intento
+   * y bloquea confirmaciones concurrentes. Verifica autorización, código, monto y orden antes de
+   * settle; redirige con resultado sin confiar en datos del navegador.
+   */
   app.all('/api/payments/webpay/commit', wrap(async (req, res) => {
     const q = req.method === 'GET' ? req.query : req.body;
     const token = q.token_ws || q.TBK_TOKEN;
     const p = token && (await db.prepare("SELECT * FROM payments WHERE provider_token=? AND provider='webpay'").get(token));
+    /**
+     * Redirige al sitio público con el resultado del retorno y el id de la reserva, si se encontró
+     * el intento. La URL informa a la interfaz; el estado financiero proviene de la verificación del
+     * servidor.
+     */
     const redirect = status => res.redirect(base() + '/?payment=' + status + (p ? '&bookingId=' + encodeURIComponent(p.booking_id) : ''));
     if (!p) return redirect('error');
     if (['pagado', 'liberado', 'reembolsado'].includes(p.status)) return redirect('success');
@@ -154,12 +219,17 @@ function paymentsRoutes(app) {
       return redirect('review');
     }
   }));
+  /**
+   * POST /api/payments/paypal/create-order. Valida configuración y pago, crea la orden PayPal y
+   * guarda importe USD y moneda esperados. Un error de creación requiere conciliación antes de
+   * repetir.
+   */
   app.post('/api/payments/paypal/create-order', wrap(async (req, res) => {
     if (!providers().paypal.isConfigured()) S.fail(400, 'PayPal no está configurado.');
     const {
       b,
       id
-    } = await db.transaction(async () => await prepare(req, 'paypal')).immediate();
+    } = await db.transaction(/* Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT. */ async () => await prepare(req, 'paypal')).immediate();
     try {
       const r = await providers().paypal.createOrder({
         bookingId: b.id,
@@ -174,9 +244,19 @@ function paymentsRoutes(app) {
       S.fail(502, 'No se pudo verificar la orden. Skilly debe revisar el intento antes de repetirlo.');
     }
   }));
+  /**
+   * GET /api/payments/paypal/capture. Captura la orden encontrada por token, valida estado,
+   * reserva, id, importe y moneda y delega en settle. Protege retornos repetidos y deriva
+   * resultados inciertos a revisión.
+   */
   app.get('/api/payments/paypal/capture', wrap(async (req, res) => {
     const token = String(req.query.token || ''),
       p = await db.prepare("SELECT * FROM payments WHERE provider_token=? AND provider='paypal'").get(token);
+    /**
+     * Redirige al sitio público con el resultado del retorno y el id de la reserva, si se encontró
+     * el intento. La URL informa a la interfaz; el estado financiero proviene de la verificación del
+     * servidor.
+     */
     const redirect = status => res.redirect(base() + '/?payment=' + status + (p ? '&bookingId=' + encodeURIComponent(p.booking_id) : ''));
     if (!p) return redirect('error');
     if (['pagado', 'liberado', 'reembolsado'].includes(p.status)) return redirect('success');
@@ -198,6 +278,11 @@ function paymentsRoutes(app) {
       return redirect('review');
     }
   }));
+  /**
+   * POST /api/admin/payments/:id/reconcile. Consulta el estado de un intento pendiente al
+   * proveedor y confirma solo respuestas verificadas. Un resultado sin identificador o sin estado
+   * definitivo sigue necesitando revisión externa.
+   */
   app.post('/api/admin/payments/:id/reconcile', wrap(async (req, res) => {
     S.admin(req);
     const p = await db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id);
@@ -232,6 +317,11 @@ function paymentsRoutes(app) {
       ok: true
     });
   }));
+  /**
+   * POST /api/admin/payments/:id/refund-late. Devuelve un cobro tardío previamente confirmado sin
+   * reactivar la reserva. Bloquea el intento y, si el proveedor no confirma la devolución,
+   * registra refund_operations para conciliación externa.
+   */
   app.post('/api/admin/payments/:id/refund-late', wrap(async (req, res) => {
     S.admin(req);
     const p = await db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id);
@@ -260,9 +350,16 @@ function paymentsRoutes(app) {
     }
   }));
   require('./settlements').routes(app);
+  /**
+   * POST /api/admin/bookings/:id/release. Autoriza únicamente liquidación simulada de una reserva
+   * confirmada, sin cancelación ni reclamos pendientes y fuera de producción. Marca pago liberado
+   * y reserva completada sin transferencia bancaria.
+   */
   app.post('/api/admin/bookings/:id/release', wrap(async (req, res) => {
     S.admin(req);
     await db.transaction(async () => {
+      // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
+      
       const b = await access(req, req.params.id);
       if (b.status !== 'confirmado' || b.cancellation_status) S.fail(409, 'Falta la conformidad del cliente o hay una cancelación pendiente.');
       if (await db.prepare("SELECT 1 FROM incidents WHERE booking_id=? AND status<>'resuelta'").get(b.id)) S.fail(409, 'Resuelve las incidencias antes de liberar.');
