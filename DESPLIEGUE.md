@@ -43,7 +43,7 @@ NODE_ENV=production desactiva el pago simulado y la bandeja de correos de prueba
 5. Configura correo y prueba verificación, invitaciones, recuperación y acceso de invitados.
 6. Completa pruebas contra Webpay integración y PayPal sandbox con las credenciales correspondientes.
 
-Para restaurar, detén ambos procesos y restaura el `.dump` con `pg_restore --exit-on-error --single-transaction --no-owner` sobre una base nueva y vacía. Configura DATABASE_URL para esa base, comprueba los datos y vuelve a iniciar. Conserva la base anterior hasta validar la restauración. Ver [PostgreSQL](docs/POSTGRESQL.md).
+Para restaurar, detén ambos procesos y restaura el `.dump` con `pg_restore --exit-on-error --single-transaction --no-owner` sobre una base nueva y vacía. Configura DATABASE_URL para esa base, comprueba los datos y vuelve a iniciar. Conserva la base anterior hasta validar la restauración.
 
 ## Alcance de esta entrega
 

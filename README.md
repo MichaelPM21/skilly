@@ -57,7 +57,7 @@ WEBPAY_ENV=integration
 PAYPAL_ENV=sandbox
 ~~~
 
-Instala PostgreSQL 18 y configura un usuario exclusivo y las bases `skilly` y `skilly_test`. Sustituye CAMBIAR por la contraseña local; no publiques `.env`. Ejecuta `npm run db:migrate`. No se crean cuentas ni perfiles demo automáticamente. Consulta [la guía PostgreSQL](docs/POSTGRESQL.md).
+Instala PostgreSQL 18 y configura un usuario exclusivo y las bases `skilly` y `skilly_test`. Sustituye CAMBIAR por la contraseña local; no publiques `.env`. Ejecuta `npm run db:migrate`. No se crean cuentas ni perfiles demo automáticamente.
 
 El pago simulado permite probar todo el recorrido sin correo ni pasarelas externas.
 
@@ -65,7 +65,7 @@ El pago simulado permite probar todo el recorrido sin correo ni pasarelas extern
 
 `npm run db:backup` genera un respaldo PostgreSQL `.dump` en `.local/backups/`. Requiere `pg_dump` de la misma versión principal o posterior; `PG_BIN` permite indicar su carpeta.
 
-La migración local del 15-11-2026 trasladó 169 registros de 20 tablas y verificó su contenido. El archivo SQLite original y su respaldo se conservan, pero la aplicación ya no los utiliza. La importación a otra instalación solo admite un destino vacío: consulta [el procedimiento](docs/POSTGRESQL.md). Las cuentas conservan sus contraseñas existentes.
+La migración local del 15-11-2026 trasladó 169 registros de 20 tablas y verificó su contenido. El archivo SQLite original y su respaldo se conservan, pero la aplicación ya no los utiliza. Para importar en otra instalación, detén las escrituras en el origen, obtén un respaldo consistente y configura `DATABASE_URL` hacia una base PostgreSQL vacía. Ejecuta `node scripts/import-sqlite.js RUTA_DEL_RESPALDO.db`; el importador valida la integridad y el contenido antes de confirmar la transacción. Las cuentas conservan sus contraseñas existentes.
 
 ## 4. Crear el primer administrador
 
