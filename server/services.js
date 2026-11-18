@@ -16,6 +16,7 @@ const {
 } = require('./accounts');
 const schedule = require('./scheduling');
 const notify = require('./notifications');
+const { clpPrice } = require('../public/js/input-validation');
 /**
  * Convierte el valor a número y exige un entero dentro del intervalo inclusivo. Lanza 400 usando
  * la etiqueta del campo para explicar el error.
@@ -43,7 +44,7 @@ function validateService(b) {
   const title = text(b.title, 180),
     description = text(b.description || '', 5000);
   if (!title || !description) S.fail(400, 'Completa título y descripción.');
-  const price = integer(typeof b.price === 'string' ? b.price.replace(/[^0-9]/g, '') : b.price, 1, 100000000, 'Precio');
+  const price = integer(clpPrice(b.price), 1, 100000000, 'Precio');
   const tags = Array.isArray(b.tags) ? b.tags.map(/* Transforma cada elemento con text(t, 50) para construir la colección utilizada por esta operación. */ t => text(t, 50)).slice(0, 20) : [];
   const result = {
     title,

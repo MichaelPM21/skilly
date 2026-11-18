@@ -366,7 +366,8 @@ function bookingsRoutes(app) {
     if (!['entregado', 'confirmado'].includes(b.status)) S.fail(409, 'Primero el profesional debe marcar el servicio como entregado.');
     const comment = text(req.body.comment || '', 4000);
     if (!comment) S.fail(400, 'Escribe tu evaluación privada.');
-    const stars = integer(req.body.stars || 5, 1, 5, 'Evaluación');
+    if (!['number', 'string'].includes(typeof req.body.stars)) S.fail(400, 'Selecciona una evaluación entre 1 y 5.');
+    const stars = integer(req.body.stars, 1, 5, 'Evaluación');
     await db.transaction(async () => {
       // Agrupa las comprobaciones y escrituras de esta operación en una transacción: confirma al terminar o revierte ante un error. Las llamadas anidadas usan un SAVEPOINT.
       

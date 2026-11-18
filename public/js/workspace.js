@@ -227,7 +227,7 @@ regProNext=()=>{
   for(const [id,label] of [['proName','tu nombre'],['proEmail','tu correo'],['proTitle','el título del servicio'],['proDesc','la descripción del servicio']])if(!$(id).value.trim())return registrationError('Completa '+label+'.',id);
   if(!$('proEmail').checkValidity())return registrationError('Ingresa un correo válido.','proEmail');
   if($('proPassword').value.length<12||$('proPassword').value.length>128)return registrationError('Usa una contraseña de entre 12 y 128 caracteres.','proPassword');
-  const price=Number($('proPrice').value.replace(/[^0-9]/g,''));
+  const price=SkillyInput.clpPrice($('proPrice').value);
   if(!Number.isInteger(price)||price<1||price>100000000)return registrationError('Ingresa un precio válido en pesos, por ejemplo $35.000.','proPrice');
   oldProNext();
 };
