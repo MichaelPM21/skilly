@@ -23,6 +23,14 @@ window.fetch=(input,options={})=>{
 /**
  * Envía una petición JSON a /api y devuelve el cuerpo de respuesta. Si el estado HTTP es de
  * error, lanza el mensaje público del servidor para que lo muestre la interfaz.
+ *
+ * @param {string} path - Ruta relativa a /api/ sin barra inicial.
+ * @param {Object} [body] - Datos serializados como JSON; omitir para GET.
+ * @param {string} [method="POST"] - Método HTTP de la solicitud.
+ * @returns {Promise<*>} JSON retornado por la API; el contrato depende de path.
+ * @throws {Error} Error con mensaje del servidor ante respuesta HTTP no satisfactoria o fallo de red.
+ * @example
+ * const bookings = await request("bookings", undefined, "GET");
  */
 async function request(path,body,method='POST') {
   const r=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
@@ -80,16 +88,32 @@ const kpi=(label,value,sub='')=>`<div class="kpiCard"><span class="kpiLabel">${l
 /**
  * Sustituye el contenido del modal compartido, escapa su título y lo abre. El cuerpo debe ser
  * HTML ya construido y escapado por el llamador.
+ *
+ * @param {string} title - Título textual del diálogo.
+ * @param {string} body - HTML de contenido, escapando previamente los datos del usuario.
+ * @returns {void} Actualiza workspaceBox y abre workspaceModal.
+ * @example
+ * modal("Información", "<p>Operación completada.</p>");
  */
 function modal(title,body){$('workspaceBox').innerHTML=`<button class="close" aria-label="Cerrar" onclick="closeM('workspaceModal')">×</button><h2>${esc(title)}</h2>${body}`;openM('workspaceModal');}
 /**
  * Ejecuta una acción asíncrona de interfaz y convierte sus errores en un aviso visible. No
  * relanza el error ni revierte acciones ya confirmadas por el servidor.
+ *
+ * @param {Function} fn - Acción asíncrona del formulario que puede fallar.
+ * @returns {Promise<void>} Espera la acción y muestra errores mediante toast; no propaga su valor de retorno.
+ * @example
+ * await perform(async () => { await request("bookings", payload); });
  */
 async function perform(fn){try{await fn();}catch(e){toast(e.message,6500);}}
 /**
  * Devuelve una URL normalizada solo si utiliza HTTPS; ante un valor inválido devuelve vacío. Se
  * usa al mostrar el enlace de LinkedIn entregado por la API.
+ *
+ * @param {string} value - URL que se usará como enlace externo.
+ * @returns {string} URL HTTPS normalizada o cadena vacía si no es aceptable.
+ * @example
+ * safeUrl("javascript:alert(1)"); // ""
  */
 function safeUrl(value){try{const u=new URL(value);return u.protocol==='https:'?u.href:'';}catch{return '';}}
 /**
@@ -168,6 +192,12 @@ setLoginRole=role=>{
 /**
  * Envía correo y contraseña a auth/login, limpia el campo secreto y actualiza sesión y datos.
  * Redirige al área correspondiente cuando el servidor confirma el acceso.
+ *
+ * No recibe argumentos.
+ * @returns {Promise<void>} Lee correo y contraseña del formulario y solicita una sesión. Los errores se muestran en la interfaz.
+ * @example
+ * // Con el formulario correspondiente completado en la página:
+ * await doLogin();
  */
 doLogin=()=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -178,6 +208,12 @@ doLogin=()=>perform(async()=>{
 /**
  * Crea una cuenta de organización en la API, limpia la contraseña y abre su panel. Informa que
  * debe verificarse el correo mediante el enlace enviado.
+ *
+ * No recibe argumentos.
+ * @returns {Promise<void>} Lee los datos de organización y solicita el registro. Los errores se muestran en la interfaz.
+ * @example
+ * // Con el formulario correspondiente completado en la página:
+ * await submitOrgRegister();
  */
 submitOrgRegister=()=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -236,6 +272,12 @@ let professionalRegistrationPending=false;
  * Valida antecedentes y LinkedIn, bloquea envíos duplicados y registra cuenta, perfil y servicio
  * mediante auth/register. Distingue un fallo de creación de un fallo posterior de refresco para
  * no invitar a registrar la misma cuenta dos veces.
+ *
+ * No recibe argumentos.
+ * @returns {Promise<void>} Envía los datos y antecedentes profesionales reunidos en el registro. Los errores se muestran en la interfaz.
+ * @example
+ * // Con el formulario correspondiente completado en la página:
+ * await submitProValidation();
  */
 submitProValidation=async()=>{
   if(professionalRegistrationPending)return;
@@ -350,6 +392,11 @@ nextAvailableDays=(prof,count=12)=>{
  * Selecciona el servicio: visitantes e invitados usan el formulario gestionado por Skilly y
  * organizaciones usan el modal de solicitud. Evita iniciar contratación desde el espacio
  * profesional o administrativo.
+ *
+ * @param {string} id - ID del servicio publicado, aunque el contexto heredado use professionalId.
+ * @returns {void} Abre solicitud invitada o de organización según la sesión.
+ * @example
+ * startBooking(serviceId);
  */
 startBooking=id=>{if(SESSION?.role==='profesional'||ADMIN_APP)return;if(!SESSION||SESSION.role==='invitado'){renderGuestForm(id);openM('guestBooking');return;}bookingCtx={professionalId:id,date:null,time:null};renderBookingModal(SERVICES.find(/* Busca el primer elemento según la condición s.id===id. Se evalúan los datos ya cargados. */ s=>s.id===id));openM('booking');};
 const oldBookingModal=renderBookingModal;
@@ -381,6 +428,11 @@ confirmBooking=()=>perform(async()=>{
 /**
  * Construye los campos de contacto y fecha para solicitar sin cuenta. Usa servicios del catálogo
  * y carga horarios reales mediante guestSlots.
+ *
+ * @param {string} id - ID de un servicio publicado cargado en SERVICES.
+ * @returns {void} Construye contacto y fechas de invitado e inicia la consulta de horarios.
+ * @example
+ * renderGuestForm(serviceId);
  */
 renderGuestForm=id=>{
   const s=SERVICES.find(/* Busca el primer elemento según la condición x.id===id. Se evalúan los datos ya cargados. */ x=>x.id===id);if(!s)return;
@@ -407,6 +459,11 @@ const originalCheckout=openCheckout;
 /**
  * Exige una reserva aceptada, reutiliza el checkout y agrega términos de cancelación y
  * consentimiento explícito. Oculta pago simulado cuando la configuración no lo permite.
+ *
+ * @param {string} id - Reserva aceptada disponible en BOOKINGS.
+ * @returns {void} Abre condiciones y métodos de pago; una reserva no aceptada solo muestra aviso.
+ * @example
+ * openCheckout(bookingId);
  */
 openCheckout=id=>{
   const b=BOOKINGS.find(/* Busca el primer elemento según la condición x.id===id. Se evalúan los datos ya cargados. */ x=>x.id===id);if(!b||b.status!=='aceptado')return toast('El profesional debe aceptar primero.');
@@ -479,6 +536,12 @@ function bookingCards(rows){return rows.length?rows.map(b=>{
 /**
  * Envía aceptación o rechazo profesional y refresca la agenda y las reservas para reflejar el
  * resultado confirmado.
+ *
+ * @param {string} id - Reserva del profesional autenticado.
+ * @param {string} status - Respuesta profesional: aceptado o rechazado.
+ * @returns {void} Inicia la actualización y refresca los datos cuando finaliza.
+ * @example
+ * bookingAction(bookingId, "aceptado");
  */
 function bookingAction(id,status){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -542,11 +605,23 @@ function renderMyServices(el){el.innerHTML=`<div class="sectionTitle"><div><h3>M
 /**
  * Carga un borrador existente o valores iniciales en el formulario y guarda selectedService.
  * Permite editar precio, contenido y tiempos sin publicar directamente.
+ *
+ * @param {string} [id] - Servicio propio a editar; omitir para crear uno nuevo.
+ * @returns {void} Abre el formulario y establece selectedService; aún no guarda cambios.
+ * @example
+ * editService(); // Nuevo servicio
+ * editService(serviceId); // Servicio ya cargado
  */
 function editService(id){selectedService=id||null;const s=SERVICES.find(/* Busca el primer elemento según la condición s.id===id. Se evalúan los datos ya cargados. */ s=>s.id===id)||{};modal(id?'Editar servicio':'Nuevo servicio',`<label>Título<input id="editTitle" value="${esc(s.title||'')}"></label><label>Descripción<textarea id="editDesc">${esc(s.description||'')}</textarea></label><div class="formgrid2"><label>Categoría<select id="editCategory">${['Tecnología','Marketing','Diseño','Consultoría'].map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ v=>`<option ${v===s.category?'selected':''}>${v}</option>`).join('')}</select></label><label>Modalidad<select id="editModality">${['Remoto','Híbrido','Presencial'].map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ v=>`<option ${v===s.modality?'selected':''}>${v}</option>`).join('')}</select></label></div><label>Precio total en CLP<input id="editPrice" type="number" min="1" value="${s.price||''}"></label><label>Etiquetas separadas por coma<input id="editTags" value="${esc((s.tags||[]).join(', '))}"></label><div class="formgrid3"><label>Atención (min)<input id="editDuration" type="number" min="15" value="${s.durationMinutes||60}"></label><label>Preparación (min)<input id="editPrep" type="number" min="0" value="${s.prepMinutes||0}"></label><label>Seguimiento (min)<input id="editFollow" type="number" min="0" value="${s.followupMinutes||0}"></label></div><p class="hint">Describe el servicio sin nombre, enlaces de contacto ni LinkedIn. Skilly revisará la publicación.</p>${action('Enviar a revisión','saveService()','primary')}`);}
 /**
  * Recoge y normaliza los campos del formulario y envía POST o PATCH según selectedService.
  * Cierra el modal y recarga los servicios pendientes de revisión.
+ *
+ * No recibe argumentos.
+ * @returns {void} Lee el formulario, valida el importe y envía el borrador a revisión. Los errores se muestran en la interfaz.
+ * @example
+ * // Con el formulario correspondiente completado en la página:
+ * saveService();
  */
 function saveService(){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -554,6 +629,12 @@ function saveService(){perform(async()=>{
 /**
  * Dibuja días ofrecidos, jornada, horas de inicio, fechas bloqueadas y límites de atención
  * compartidos por todos los servicios del profesional.
+ *
+ * @param {HTMLElement} el - Contenedor del formulario.
+ * @param {Object} p - Perfil profesional en camelCase, con disponibilidad y límites.
+ * @returns {void} Dibuja jornada, horas, bloqueos y cupos; no persiste por sí misma.
+ * @example
+ * renderAvailability(document.getElementById("panelBody"), profile);
  */
 function renderAvailability(el,p){el.innerHTML=`<div class="dashCard"><h3>Mi jornada laboral</h3><p class="hint">Todos tus servicios comparten esta agenda. Los horarios usan la zona de Chile continental.</p><div class="checkgrid">${WEEKDAYS.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ d=>`<label><input class="availabilityDay" type="checkbox" value="${d}" ${p.availability.days?.includes(d)?'checked':''}> ${d}</label>`).join('')}</div><div class="formgrid2"><label>Inicio de jornada<input id="workStart" type="time" value="${p.workStart}"></label><label>Fin de jornada<input id="workEnd" type="time" value="${p.workEnd}"></label></div><label>Horas de inicio ofrecidas (separadas por coma)<input id="workHours" value="${esc((p.availability.hours||[]).join(', '))}" placeholder="09:00, 10:30, 15:00"></label><label>Fechas bloqueadas (una por línea, AAAA-MM-DD)<textarea id="blockedDates" placeholder="2026-12-25">${esc(p.blockedDates.join('\n'))}</textarea></label><p class="hint">Los bloqueos afectan nuevas solicitudes; las reservas ya aceptadas se mantienen y deben gestionarse individualmente.</p><div class="formgrid3"><label>Máximo diario<input type="number" min="0" id="limitDay" value="${p.maxPerDay??''}" placeholder="Sin límite"></label><label>Máximo semanal<input type="number" min="0" id="limitWeek" value="${p.maxPerWeek??''}" placeholder="Sin límite"></label><label>Máximo mensual<input type="number" min="0" id="limitMonth" value="${p.maxPerMonth??''}" placeholder="Sin límite"></label></div>${action('Guardar disponibilidad',`saveAvailability('${p.id}')`,'primary')}</div>`;}
 /**
@@ -566,11 +647,22 @@ function saveAvailability(id){perform(async()=>{/* Lee un límite del formulario
 /**
  * Dibuja los datos de cuenta y contacto, correo de solo lectura y estado de verificación. Ofrece
  * guardar el perfil o solicitar cambio de contraseña.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja el perfil autenticado.
+ * @returns {void} Reemplaza el contenido del elemento por el formulario de contacto.
+ * @example
+ * renderProfile(document.getElementById("panelBody"));
  */
 function renderProfile(el){const p=SESSION.profile||{};el.innerHTML=`<div class="dashCard"><h3>Datos de mi cuenta</h3><label>Nombre<input id="profileName" value="${esc(SESSION.name)}"></label><label>Correo<input value="${esc(SESSION.email)}" disabled></label><div class="formgrid2"><label>Teléfono<input type="tel" autocomplete="tel" placeholder="+56 9 1234 5678" id="profilePhone" value="${esc(p.phone||'')}"></label><label>RUT<input placeholder="12345678-5" id="profileRut" value="${esc(p.rut||'')}"></label></div><label>Dirección<input id="profileAddress" value="${esc(p.address||'')}"></label><p class="hint">Correo ${SESSION.verified?'verificado':'pendiente de verificación'}.</p>${action('Guardar perfil','saveProfile()','primary')}${action('Cambiar contraseña','openRecovery()')}</div>`;}
 /**
  * Envía nombre, teléfono, RUT y dirección; actualiza SESSION con la respuesta validada del
  * servidor y refresca los datos.
+ *
+ * No recibe argumentos.
+ * @returns {void} Lee los campos de contacto, solicita su guardado y recarga el perfil. Los errores se muestran en la interfaz.
+ * @example
+ * // Con el formulario correspondiente completado en la página:
+ * saveProfile();
  */
 function saveProfile(){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -610,6 +702,12 @@ function calendarMode(mode){calMode=mode;redrawCalendar();}
  * Filtra reservas por estado, profesional y servicio y genera una cuadrícula mensual de 42
  * celdas o agenda semanal/diaria. Incluye bloqueos, tiempos del servicio y acceso al detalle;
  * usa las fechas guardadas de las reservas.
+ *
+ * @param {HTMLElement} el - Contenedor del calendario.
+ * @param {boolean} admin - true habilita la presentación administrativa.
+ * @returns {void} Dibuja la vista del calendario según modo, filtros y reservas cargadas.
+ * @example
+ * renderCalendar(document.getElementById("panelBody"), false);
  */
 function renderCalendar(el,admin){
   if(!el)return;calAdmin=admin;
@@ -639,6 +737,11 @@ function renderCalendar(el,admin){
 }
 /**
  * Busca una reserva cargada y abre su tarjeta completa en el modal compartido.
+ *
+ * @param {string} id - Reserva existente en BOOKINGS.
+ * @returns {void} Busca la reserva y abre su detalle; no modifica su estado.
+ * @example
+ * showBooking(bookingId);
  */
 function showBooking(id){const b=BOOKINGS.find(/* Busca el primer elemento según la condición b.id===id. Se evalúan los datos ya cargados. */ b=>b.id===id);if(b)modal('Detalle de reserva',bookingCards([b]));}
 /**
@@ -697,6 +800,13 @@ function renderAdminServices(el){el.innerHTML=`<p class="hint">Revisa el conteni
 /**
  * Envía decisión, observaciones y el hash de revisión cargado. El servidor rechaza una
  * aprobación si el profesional cambió el borrador desde que se abrió.
+ *
+ * @param {string} id - ID del servicio cargado en SERVICES.
+ * @param {string} status - Decisión: validado, info_solicitada o rechazado.
+ * @returns {void} Inicia la revisión con notas y hash de versión; perform gestiona el resultado asíncrono.
+ * @example
+ * // Desde la pantalla administrativa con las observaciones completadas:
+ * reviewService(serviceId, "info_solicitada");
  */
 function reviewService(id,status){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.

@@ -25,6 +25,11 @@ const {
  * Convierte una fila de payments al contrato público de pagos y comprobantes. Excluye tokens
  * internos y claves de operación; el listado aplica después la ocultación de identidad antes del
  * pago.
+ *
+ * @param {Object} p - Fila payments que ya pasó el control de acceso.
+ * @returns {Object} Pago en camelCase sin tokens internos; la proyección no comprueba titularidad.
+ * @example
+ * const view = paymentView(paymentRow);
  */
 function paymentView(p) {
   return {
@@ -52,6 +57,14 @@ function paymentView(p) {
  * Exige reserva aceptada vigente, cliente propietario, condiciones aceptadas y ausencia de
  * reclamo o pago activo. Inserta un intento con el monto contractual y registra versión de
  * términos; se ejecuta bajo transacción antes de llamar a la pasarela.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {string} provider - Proveedor: simulado, webpay o paypal.
+ * @returns {Promise<{b: Object, id: string}>} Reserva autorizada y ID del intento recién creado.
+ * @throws {Error} Error 400/403/409 si faltan términos, titularidad, vigencia o existe una operación incompatible.
+ * @example
+ * // req.body: {bookingId, acceptTerms:true}; siempre bajo transacción.
+ * const prepared = await db.transaction(() => prepare(req, "simulado")).immediate();
  */
 async function prepare(req, provider) {
   await expire();
@@ -77,6 +90,15 @@ async function prepare(req, provider) {
  * Confirma atómicamente un cobro verificado, registra comprobante y autorización y marca la
  * reserva pagada si todavía corresponde. Las respuestas repetidas no duplican efectos; un cobro
  * tardío queda en revisión sin recuperar el horario.
+ *
+ * @param {string} paymentId - Intento existente cuya respuesta del proveedor ya fue verificada.
+ * @param {Object} details - Datos de autorización del proveedor.
+ * @param {string} [details.authorization] - Código de autorización.
+ * @param {string} [details.card] - Últimos dígitos de la tarjeta.
+ * @param {string} [details.type] - Tipo de pago devuelto por el proveedor.
+ * @returns {Promise<string>} success para confirmación válida o repetida; review para un cobro tardío.
+ * @example
+ * const status = await settle(paymentId, {authorization:"PRUEBA", card:"1234", type:"VD"});
  */
 async function settle(paymentId, details) {
   return await db.transaction(async () => {
@@ -96,6 +118,12 @@ async function settle(paymentId, details) {
  * Registra pagos simulados, creación y retornos de Webpay/PayPal, conciliación, devolución
  * tardía y liberación simulada. Delega cancelaciones y transferencias externas en settlements;
  * las llamadas a proveedores quedan fuera de las transacciones críticas.
+ *
+ * @param {import("express").Express} app - Aplicación pública o administrativa que recibe los manejadores HTTP.
+ * @returns {void} Registra rutas y middleware en app; no inicia el servidor.
+ * @example
+ * // Durante la construcción de la aplicación Express:
+ * paymentsRoutes(app);
  */
 function paymentsRoutes(app) {
   /**

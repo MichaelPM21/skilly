@@ -1,5 +1,14 @@
 /* Validadores puros compartidos por los formularios y el servidor. */
 (function (root) {
+  /**
+   * Normaliza importes CLP para formularios y servidor sin convertir precios negativos en positivos.
+   *
+   * @param {*} value - Número entero o texto CLP sin signo ni decimales; admite separador de miles.
+   * @returns {number} Precio de 1 a 100000000, o NaN si la entrada no cumple el contrato.
+   * @example
+   * SkillyInput.clpPrice("$35.000"); // 35000
+   * Number.isNaN(SkillyInput.clpPrice("-1")); // true
+   */
   function clpPrice(value) {
     if (typeof value === 'string') {
       const raw = value.trim();

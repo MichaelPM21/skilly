@@ -40,6 +40,12 @@ async function finish(op, reference) {
  * Registra cotización de cancelación, devolución y conciliación manual, además de órdenes y
  * confirmaciones de transferencias externas. Valida conformidad, reclamos, importe y
  * comprobante; registrar una transferencia no la ejecuta en el banco.
+ *
+ * @param {import("express").Express} app - Aplicación pública o administrativa que recibe los manejadores HTTP.
+ * @returns {void} Registra rutas y middleware en app; no inicia el servidor.
+ * @example
+ * // Durante la construcción de la aplicación Express:
+ * routes(app);
  */
 function routes(app) {
   /**

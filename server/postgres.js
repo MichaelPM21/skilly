@@ -32,6 +32,14 @@ const context = new AsyncLocalStorage();
  * Convierte marcadores ? o @nombre en parámetros $1, $2, etc., sin sustituir contenido dentro de
  * literales SQL entre comillas. Devuelve text y values por separado y rechaza argumentos
  * ausentes o cantidades incompatibles.
+ *
+ * @param {string} sql - SQL con marcadores ? posicionales o @nombre.
+ * @param {Array<*>} args - Argumentos posicionales o un único objeto de parámetros nombrados.
+ * @returns {{text: string, values: Array<*>}} SQL con marcadores $n y valores separados.
+ * @throws {Error} Error por parámetro ausente o cantidad incompatible.
+ * @example
+ * bind("SELECT * FROM users WHERE id=?", ["usr_demo"]);
+ * // {text:"SELECT * FROM users WHERE id=$1", values:["usr_demo"]}
  */
 function bind(sql,args) {
   const named=args.length===1 && args[0]!==null && typeof args[0]==='object' && !Buffer.isBuffer(args[0]) && !Array.isArray(args[0]);
@@ -50,6 +58,13 @@ function bind(sql,args) {
 /**
  * Ejecuta SQL parametrizado en el cliente de la transacción actual, si existe, o en el pool.
  * AsyncLocalStorage mantiene la conexión durante las llamadas asíncronas relacionadas.
+ *
+ * @param {string} text - SQL parametrizado con $1, $2, etc.
+ * @param {Array<*>} [values=[]] - Valores enviados separadamente a PostgreSQL.
+ * @returns {Promise<import("pg").QueryResult>} Resultado del driver con rows y rowCount.
+ * @throws {Error} Propaga errores del driver PostgreSQL.
+ * @example
+ * const result = await query("SELECT $1::int AS value", [7]);
  */
 async function query(text,values=[]) {return (context.getStore()?.client||pool).query(text,values);}
 /**
@@ -80,6 +95,11 @@ const db={
   /**
    * Construye un adaptador de consulta con get, all y run. Cada ejecución convierte los parámetros
    * con bind y delega en query; no prepara una sentencia persistente en PostgreSQL.
+   *
+   * @param {string} sql - SQL con marcadores compatibles con bind.
+   * @returns {Object} Adaptador con get, all y run; los argumentos se suministran al ejecutar.
+   * @example
+   * const user = await db.prepare("SELECT id FROM users WHERE id=?").get("usr_demo");
    */
   prepare(sql) {
     /**
@@ -90,10 +110,20 @@ const db={
     return {
       /**
        * Ejecuta la consulta y resuelve su primera fila, o undefined si no hay coincidencias.
+       *
+       * @param {...*} args - Valores posicionales o un objeto nombrado compatibles con la consulta.
+       * @returns {Promise<Object|undefined>} Primera fila o undefined si no hay coincidencias.
+       * @example
+       * const row = await db.prepare("SELECT id FROM users WHERE id=?").get("usr_demo");
        */
       async get(...args){return (await execute(args)).rows[0];},
       /**
        * Ejecuta la consulta y resuelve el arreglo completo de filas, vacío si no hay resultados.
+       *
+       * @param {...*} args - Valores de la consulta, sin interpolarlos en SQL.
+       * @returns {Promise<Object[]>} Todas las filas; arreglo vacío si no hay resultados.
+       * @example
+       * const rows = await db.prepare("SELECT id FROM users WHERE role=?").all("organizacion");
        */
       async all(...args){return (await execute(args)).rows;},
       /**
@@ -112,11 +142,22 @@ const db={
   /**
    * Ejecuta SQL sin parámetros a través de query. Se utiliza principalmente para DDL y control de
    * migraciones; no debe recibir texto construido con datos no validados del usuario.
+   *
+   * @param {string} sql - Sentencia confiable sin parámetros, destinada a DDL o control interno.
+   * @returns {Promise<import("pg").QueryResult>} Resultado PostgreSQL de la sentencia.
+   * @example
+   * await db.exec("SELECT 1");
    */
   async exec(sql){return query(sql);},
   /**
    * Cierra el pool PostgreSQL y devuelve la promesa de finalización. Se usa al detener servidores,
    * scripts y pruebas.
+   *
+   * No recibe argumentos.
+   * @returns {Promise<void>} Finaliza el pool cuando terminan las conexiones pendientes.
+   * @example
+   * // Al cerrar el proceso y después de finalizar solicitudes:
+   * await db.close();
    */
   async close(){return pool.end();}
 };
@@ -128,12 +169,22 @@ const uid=prefix=>prefix+'_'+randomUUID().replaceAll('-','');
 /**
  * Lee la única fila de configuración, identificada por id=1. Resuelve los porcentajes y límites
  * que usan los servicios y las nuevas reservas.
+ *
+ * No recibe argumentos.
+ * @returns {Promise<Object|undefined>} Fila settings con id=1, o undefined si la base no fue inicializada.
+ * @example
+ * const settings = await getSettings();
  */
 async function getSettings(){return db.prepare('SELECT * FROM settings WHERE id=1').get();}
 /**
  * Combina un parche con la configuración actual y persiste capacidad semanal y porcentaje de
  * devolución. Es un adaptador heredado: la ruta administrativa actual actualiza también
  * comisiones y plazos directamente.
+ *
+ * @param {Object} patch - Parche de admin_weekly_review_capacity y default_cancellation_refund_percent.
+ * @returns {Promise<Object>} Configuración consultada después de persistir esos dos campos.
+ * @example
+ * const settings = await updateSettings({admin_weekly_review_capacity:10});
  */
 async function updateSettings(patch){const next={...await getSettings(),...patch};await db.prepare('UPDATE settings SET admin_weekly_review_capacity=?,default_cancellation_refund_percent=? WHERE id=1').run(next.admin_weekly_review_capacity,next.default_cancellation_refund_percent);return getSettings();}
 module.exports={db,uid,getSettings,updateSettings,bind};

@@ -17,6 +17,12 @@
    * Calcula solicitudes pendientes, próximas reservas, neto pendiente, gasto menos devoluciones y
    * completadas. Excluye cancelaciones en conciliación del neto pendiente; no prueba
    * transferencias bancarias.
+   *
+   * @param {Object[]} bookings - Reservas ya proyectadas al formato de la interfaz.
+   * @param {number} [now=Date.now()] - Instante usado para separar reservas futuras.
+   * @returns {Object} Indicadores del cliente y del profesional; no representa transferencias ejecutadas.
+   * @example
+   * const totals = SkillyView.metrics(bookings, Date.now());
    */
   function metrics(bookings, now = Date.now()) {
     return {
@@ -32,6 +38,11 @@
    * Devuelve pares etiqueta/importe según el estado: para cancelaciones muestra devolución y
    * remanente pendiente, para conciliación indica suspensión y para otras reservas muestra
    * comisión y neto acordados.
+   *
+   * @param {Object} b - Reserva con monto, comisión, neto, estado y devoluciones.
+   * @returns {Array<Array<string|number|null>>} Pares de etiqueta e importe para representar el desglose.
+   * @example
+   * const lines = SkillyView.financialLines(booking);
    */
   function financialLines(b) {
     if (b.status === 'cancelado') return [
@@ -47,13 +58,31 @@
   /**
    * Traduce estados de pago a etiquetas financieras sin confundirlos con entrega o avance del
    * servicio.
+   *
+   * @param {string} status - Estado interno del pago.
+   * @returns {string} Etiqueta financiera visible, o el estado original como alternativa.
+   * @example
+   * SkillyView.paymentLabel("pagado");
    */
   function paymentLabel(status) {
     return ({ iniciado:'Pago iniciado', procesando:'Pago en proceso', revision:'Pago en revisión',
       pagado:'Pago confirmado', liberado:'Pago liquidado', reembolsado:'Devolución registrada',
       rechazado:'Pago rechazado' })[status] || status;
   }
-  const api = { metrics, financialLines, paymentLabel, /* Indica si una reserva está completada, cancelada, rechazada o expirada para agruparla en el historial. */ isTerminal: b => terminal.has(b.status) };
+  const api = {
+    metrics,
+    financialLines,
+    paymentLabel,
+    /**
+     * Comprueba si la reserva terminó para separar operaciones activas e historial.
+     *
+     * @param {Object} b - Reserva cuyo status se consulta.
+     * @returns {boolean} Indica si la reserva está en un estado terminal definido en esta vista.
+     * @example
+     * SkillyView.isTerminal({status:"cancelado"}); // true
+     */
+    isTerminal: b => terminal.has(b.status)
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SkillyView = api;
 })(typeof window !== 'undefined' ? window : globalThis);

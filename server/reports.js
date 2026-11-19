@@ -21,6 +21,12 @@ const {
  * Registra informes administrativos de organizaciones e indicadores operativos. Agrupa reservas
  * por correo y resume estados e importes; los agregados no constituyen un libro contable de
  * comisiones o transferencias.
+ *
+ * @param {import("express").Express} app - Aplicación pública o administrativa que recibe los manejadores HTTP.
+ * @returns {void} Registra rutas y middleware en app; no inicia el servidor.
+ * @example
+ * // Durante la construcción de la aplicación Express:
+ * reports(app);
  */
 function reports(app) {
   /**

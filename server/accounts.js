@@ -15,11 +15,22 @@ const {
 /**
  * Adapta una función asíncrona de ruta a Express. Captura tanto excepciones síncronas como
  * rechazos y los entrega a next para conservar el formato común de error.
+ *
+ * @param {Function} fn - Operación que ejecutará el adaptador; sus errores se propagan al llamador.
+ * @returns {import("express").RequestHandler} Manejador que deriva rechazos y excepciones a next.
+ * @example
+ * app.get("/api/example", wrap(async (req, res) => { res.json({ok:true}); }));
  */
 const wrap = fn => /* Devuelve el middleware de Express que ejecuta fn con req/res y deriva cualquier error a next. */ (req, res, next) => Promise.resolve().then(/* Devuelve el middleware de Express que ejecuta fn con req/res y deriva cualquier error a next. */ () => fn(req, res)).catch(next);
 /**
  * Normaliza el correo a minúsculas sin espacios exteriores y valida formato básico y longitud
  * máxima de 254 caracteres. Lanza un error HTTP 400 si no cumple.
+ *
+ * @param {string} value - Correo recibido; se recorta y normaliza a minúsculas.
+ * @returns {string} Correo normalizado que supera el formato validado.
+ * @throws {Error} Error 400 si el correo no cumple la validación.
+ * @example
+ * email(" Persona@Example.test "); // persona@example.test
  */
 const email = value => {
   const v = String(value || '').trim().toLowerCase();
@@ -29,6 +40,13 @@ const email = value => {
 /**
  * Exige una cadena dentro del tamaño máximo y devuelve su contenido sin espacios exteriores. La
  * obligatoriedad del texto debe comprobarla el llamador.
+ *
+ * @param {string} v - Texto a normalizar; se verifica tipo antes de recortar.
+ * @param {number} [max=1000] - Longitud máxima admitida antes de trim.
+ * @returns {string} Cadena sin espacios exteriores.
+ * @throws {Error} Error 400 si el valor no es texto o excede max.
+ * @example
+ * text("  Asesoría  ", 180); // Asesoría
  */
 const text = (v, max = 1000) => {
   if (typeof v !== 'string' || v.length > max) S.fail(400, 'Texto inválido o demasiado largo.');
@@ -38,6 +56,12 @@ const text = (v, max = 1000) => {
  * Normaliza enlaces de LinkedIn, agregando HTTPS a los que comienzan por su dominio. Rechaza
  * otros dominios, protocolos, credenciales embebidas y URLs excesivas con un mensaje de
  * validación.
+ *
+ * @param {string} value - URL de perfil que debe utilizar un dominio LinkedIn permitido.
+ * @returns {string} URL HTTPS normalizada del perfil.
+ * @throws {Error} Error 400 si falta el perfil o la URL no corresponde a LinkedIn.
+ * @example
+ * linkedin("https://www.linkedin.com/in/perfil-demo");
  */
 function linkedin(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -53,6 +77,12 @@ function linkedin(value) {
  * Registra registro, ingreso, sesiones, verificación, recuperación, perfil y accesos invitados.
  * La cuenta profesional crea perfil y primer servicio en una transacción; las rutas
  * administrativas gestionan invitaciones y auditoría.
+ *
+ * @param {import("express").Express} app - Aplicación pública o administrativa que recibe los manejadores HTTP.
+ * @returns {void} Registra rutas y middleware en app; no inicia el servidor.
+ * @example
+ * // Durante la construcción de la aplicación Express:
+ * authRoutes(app);
  */
 function authRoutes(app) {
   /**
@@ -308,6 +338,11 @@ function authRoutes(app) {
  * Emite un token de invitado válido por 48 horas y encola/envía el enlace de una reserva
  * concreta. Resuelve si se confirmó el envío SMTP; el acceso posterior crea una sesión limitada
  * a esa reserva.
+ *
+ * @param {Object} b - Reserva invitada con id y org_email.
+ * @returns {Promise<boolean>} Resultado del intento de envío del enlace seguro al correo del invitado.
+ * @example
+ * const sent = await guestLink(guestBooking);
  */
 async function guestLink(b) {
   const token = await S.issueToken('guest', b.id, 48 * 3600000);

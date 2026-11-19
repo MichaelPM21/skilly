@@ -48,6 +48,11 @@ function buildTransaction() {
 /**
  * Genera una orden alfanumérica prefijada con SK y limitada a 26 caracteres. La usa
  * createTransaction para asociar el intento enviado a Webpay.
+ *
+ * @param {string} bookingId - ID interno de reserva; se eliminan caracteres no alfanuméricos.
+ * @returns {string} Orden con prefijo SK y máximo 26 caracteres.
+ * @example
+ * toBuyOrder("bkg_demo"); // SKbkgdemo
  */
 function toBuyOrder(bookingId) {
   return ('SK' + bookingId.replace(/[^a-zA-Z0-9]/g, '')).slice(0, 26);
@@ -56,6 +61,15 @@ function toBuyOrder(bookingId) {
 /**
  * Inicia una transacción Webpay por importe CLP y URL de retorno. Devuelve token, URL, orden y
  * sesión; todavía no confirma el cobro.
+ *
+ * @param {Object} options - Datos del intento antes de confirmar el pago.
+ * @param {string} options.bookingId - Reserva interna asociada.
+ * @param {number} options.amount - Importe entero CLP calculado por el servidor.
+ * @param {string} options.returnUrl - URL autorizada para el retorno del proveedor.
+ * @returns {Promise<{token: string, url: string, buyOrder: string, sessionId: string}>} Datos para redirigir al proveedor; todavía no acredita un cobro.
+ * @throws {Error} Propaga errores de configuración, red y SDK.
+ * @example
+ * const tx = await createTransaction({bookingId, amount:85000, returnUrl});
  */
 async function createTransaction({ bookingId, amount, returnUrl }) {
   const tx = buildTransaction();
@@ -69,6 +83,13 @@ async function createTransaction({ bookingId, amount, returnUrl }) {
 /**
  * Confirma el token ante Webpay y devuelve la respuesta del SDK. payments.js comprueba
  * autorización, código, monto y orden antes de modificar la reserva.
+ *
+ * @param {string} token - Token Webpay recibido en el retorno.
+ * @returns {Promise<Object>} Respuesta de confirmación del SDK; el llamador debe validar monto, orden y autorización.
+ * @throws {Error} Propaga errores de configuración, red y proveedor.
+ * @example
+ * // Usar una transacción de integración controlada:
+ * const response = await commitTransaction(token);
  */
 async function commitTransaction(token) {
   const tx = buildTransaction();
@@ -81,6 +102,14 @@ async function commitTransaction(token) {
 /**
  * Solicita al SDK la devolución del importe indicado para un token. Devuelve la respuesta de
  * Webpay; el llamador valida el resultado y gestiona respuestas inciertas.
+ *
+ * @param {string} token - Token de la transacción pagada.
+ * @param {number} amount - Monto CLP de la devolución.
+ * @returns {Promise<Object>} Resultado del SDK de devolución; puede requerir conciliación.
+ * @throws {Error} Propaga errores de configuración, red y proveedor.
+ * @example
+ * // Usar una transacción de integración controlada:
+ * const response = await refundTransaction(token, amount);
  */
 async function refundTransaction(token, amount) {
   const tx = buildTransaction();
@@ -92,6 +121,13 @@ async function refundTransaction(token, amount) {
 /**
  * Consulta el estado del token ante Webpay sin iniciar un pago nuevo. Se utiliza en conciliación
  * administrativa.
+ *
+ * @param {string} token - Token de la transacción que se conciliará.
+ * @returns {Promise<Object>} Estado retornado por el SDK sin iniciar un cobro nuevo.
+ * @throws {Error} Propaga errores de configuración, red y proveedor.
+ * @example
+ * // Usar una transacción de integración controlada:
+ * const response = await statusTransaction(token);
  */
 async function statusTransaction(token) { return buildTransaction().status(token); }
 

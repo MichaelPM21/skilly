@@ -9,6 +9,16 @@
  * Valida los campos opcionales de contacto antes de persistir el perfil. Normaliza teléfono,
  * calcula el dígito verificador del RUT chileno y recorta la dirección; devuelve phone, rut y
  * address o lanza Error.
+ *
+ * @param {Object} body - Parche de contacto; los tres campos son opcionales.
+ * @param {string} [body.phone=""] - Hasta 40 caracteres; al normalizar debe tener entre 8 y 15 dígitos.
+ * @param {string} [body.rut=""] - RUT chileno con dígito verificador válido.
+ * @param {string} [body.address=""] - Dirección de hasta 300 caracteres.
+ * @returns {{phone: string, rut: string, address: string}} Contacto normalizado, sin escribir en PostgreSQL.
+ * @throws {Error} Error sin status HTTP por tipo, longitud o formato inválido; el controlador decide la respuesta.
+ * @example
+ * contactProfile({phone:"+56 9 1234 5678", rut:"12.345.678-5"});
+ * // {phone:"+56912345678", rut:"12345678-5", address:""}
  */
 function contactProfile(body) {
   /**

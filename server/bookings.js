@@ -24,6 +24,13 @@ const notify = require('./notifications');
  * Carga una reserva y verifica que pertenezca a la organización, al profesional o a la sesión
  * invitada, o que se acceda como administrador. Devuelve la fila interna; lanza 404, 401 o 403
  * según el caso.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {string} id - Identificador de reserva a consultar.
+ * @returns {Promise<Object>} Fila bookings autorizada; administración conserva acceso conforme a su audiencia.
+ * @throws {Error} Error 401/403/404 por sesión, titularidad o reserva inexistente.
+ * @example
+ * const booking = await access(req, req.params.id);
  */
 async function access(req, id) {
   const b = await db.prepare('SELECT * FROM bookings WHERE id=?').get(id);
@@ -42,6 +49,13 @@ async function access(req, id) {
 /**
  * Comprueba acceso a la reserva y exige rol organización o invitado. Se usa para acciones que
  * corresponden a quien contrata, como pagar o confirmar una entrega.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {Object} b - Fila de reserva ya cargada para comprobar titularidad.
+ * @returns {Promise<void>} No devuelve datos; autoriza al cliente o invitado de esa reserva.
+ * @throws {Error} Error 403 para un actor que no sea el cliente autorizado.
+ * @example
+ * await customer(req, booking);
  */
 async function customer(req, b) {
   await access(req, b.id);
@@ -51,6 +65,12 @@ async function customer(req, b) {
  * Proyecta la reserva para la API según el rol y paid_at. Oculta identidad antes del pago a
  * clientes, limita datos financieros internos y agrega política congelada y devolución vigente;
  * no altera el contrato almacenado.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {Object} b - Fila bookings a proyectar según el usuario que consulta.
+ * @returns {Promise<Object>} Reserva en camelCase; la identidad profesional depende del rol y del pago.
+ * @example
+ * const visibleBooking = await bookingView(req, bookingRow);
  */
 async function bookingView(req, b) {
   const internal = ['admin', 'profesional'].includes(req.user?.role);
@@ -99,6 +119,11 @@ async function bookingView(req, b) {
  * Consulta únicamente las reservas visibles para la sesión. Administración recibe todas,
  * profesional y organización las propias, invitado una sola; sin sesión devuelve un arreglo
  * vacío.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @returns {Promise<Object[]>} Reservas permitidas para el rol y la titularidad de req.user.
+ * @example
+ * const bookings = await listBookings(req);
  */
 async function listBookings(req) {
   if (!req.user) return [];
@@ -114,6 +139,14 @@ async function listBookings(req) {
  * Valida publicación, perfil y agenda; toma precio y comisión desde el servidor y guarda una
  * copia del servicio y política. Crea solicitado o gestion_skilly con plazo limitado por el
  * inicio reservado; el llamador la ejecuta dentro de una transacción para evitar solapamientos.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {boolean} guest - true utiliza contacto invitado y estado gestion_skilly; false usa la cuenta.
+ * @returns {Promise<Object>} Fila insertada con precio, comisión, política y plazos congelados.
+ * @throws {Error} Error 400/404/409 por entrada inválida, servicio inaccesible, suspensión o conflicto de agenda.
+ * @example
+ * // req.body incluye serviceId, date, time y notes; ejecutar con transacción:
+ * const booking = await db.transaction(() => createBooking(req, false)).immediate();
  */
 async function createBooking(req, guest) {
   const b = req.body,
@@ -170,6 +203,12 @@ async function createBooking(req, guest) {
  * Registra creación y consulta de reservas, gestión de invitados, cambios de estado,
  * evaluaciones, chat y documentos. Los accesos se validan en servidor y la entrega profesional
  * exige fin del intervalo y descripción de evidencia.
+ *
+ * @param {import("express").Express} app - Aplicación pública o administrativa que recibe los manejadores HTTP.
+ * @returns {void} Registra rutas y middleware en app; no inicia el servidor.
+ * @example
+ * // Durante la construcción de la aplicación Express:
+ * bookingsRoutes(app);
  */
 function bookingsRoutes(app) {
   /**

@@ -15,6 +15,11 @@ const zone = 'America/Santiago';
 /**
  * Convierte milisegundos Unix en fecha AAAA-MM-DD y hora HH:mm de America/Santiago mediante
  * Intl. Evita depender de la zona horaria del servidor.
+ *
+ * @param {number} ms - Instante Unix en milisegundos.
+ * @returns {Object} Componentes locales de fecha y hora en America/Santiago.
+ * @example
+ * const parts = localParts(Date.now());
  */
 function localParts(ms) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -36,6 +41,13 @@ function localParts(ms) {
  * Valida fecha y hora locales y calcula su instante Unix ajustando iterativamente la zona
  * America/Santiago. Comprueba el resultado y rechaza fechas imposibles u horas inexistentes por
  * el cambio horario.
+ *
+ * @param {string} date - Fecha local AAAA-MM-DD.
+ * @param {string} time - Hora local HH:mm de Chile continental.
+ * @returns {number} Instante Unix en milisegundos correspondiente a la fecha y hora local.
+ * @throws {Error} Error 400 si la fecha u hora no se puede validar.
+ * @example
+ * const instant = timestamp("2026-12-01", "10:00");
  */
 function timestamp(date, time) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time || '')) fail(400, 'Fecha u hora inválida.');
@@ -56,6 +68,11 @@ function timestamp(date, time) {
  * Marca como expiradas las solicitudes sin respuesta y aceptaciones sin pago que superaron su
  * plazo. Actualiza también las solicitudes invitadas vinculadas; puede escribir aunque la
  * invoque una consulta de disponibilidad.
+ *
+ * No recibe argumentos.
+ * @returns {Promise<void>} Actualiza reservas cuyo plazo de respuesta o pago terminó; libera agenda al cambiar estado.
+ * @example
+ * await expire();
  */
 async function expire() {
   const now = Date.now();
@@ -68,6 +85,12 @@ const inactive = new Set(['cancelado', 'rechazado', 'expirado']);
 /**
  * Convierte una hora HH:mm en minutos desde medianoche para comparar la jornada y la dedicación
  * del servicio.
+ *
+ * @param {string} time - Hora en formato HH:mm.
+ * @returns {number} Minutos transcurridos desde medianoche.
+ * @throws {Error} Error 400 ante formato no válido.
+ * @example
+ * minutes("09:30"); // 570
  */
 function minutes(time) {
   const [h, m] = time.split(':').map(Number);
@@ -78,6 +101,16 @@ function minutes(time) {
  * de todos los servicios del profesional. Incluye preparación y seguimiento, permite excluir una
  * reserva al reprogramar y devuelve inicio, término e inicio de atención; lanza 409 ante
  * conflictos.
+ *
+ * @param {Object} pro - Fila professionals: jornada, disponibilidad, bloqueos y cupos.
+ * @param {Object} service - Servicio publicado con minutos de atención, preparación y seguimiento.
+ * @param {string} date - Fecha solicitada AAAA-MM-DD.
+ * @param {string} time - Hora de atención HH:mm.
+ * @param {string} [ignoreId] - Reserva excluida al comprobar una reprogramación.
+ * @returns {Promise<{start: number, end: number, appointment: number}>} Inicio de dedicación, término e inicio de atención, en milisegundos Unix.
+ * @throws {Error} Error 400/409 por formato, pasado, jornada, bloqueo, solapamiento o capacidad.
+ * @example
+ * const slot = await available(professionalRow, publishedService, "2026-12-01", "10:00");
  */
 async function available(pro, service, date, time, ignoreId) {
   await expire();
@@ -120,6 +153,14 @@ async function available(pro, service, date, time, ignoreId) {
 /**
  * Valida arreglos de días en español y horas HH:mm, elimina duplicados y ordena horarios.
  * Devuelve la disponibilidad normalizada; admite arreglos vacíos para no ofrecer horarios.
+ *
+ * @param {Object} a - Disponibilidad propuesta.
+ * @param {string[]} a.days - Días en español, de Domingo a Sábado.
+ * @param {string[]} a.hours - Horas HH:mm; se permiten listas vacías.
+ * @returns {{days: string[], hours: string[]}} Listas sin duplicados y horarios ordenados.
+ * @throws {Error} Error 400 si las listas o sus valores son inválidos.
+ * @example
+ * validateAvailability({days:["Lunes","Lunes"], hours:["11:00","09:00"]});
  */
 function validateAvailability(a) {
   if (!a || !Array.isArray(a.days) || !Array.isArray(a.hours) || a.days.some(/* Comprueba si existe algún elemento según la condición !DAYS.includes(d). Se evalúan los datos ya cargados. */ d => !DAYS.includes(d)) || a.hours.some(/* Comprueba si existe algún elemento según la condición !/^([01]\d|2[0-3]):[0-5]\d$/.test(t). Se evalúan los datos ya cargados. */ t => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))) fail(400, 'Disponibilidad inválida.');

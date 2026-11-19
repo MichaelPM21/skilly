@@ -22,6 +22,13 @@ const categories = ['inasistencia_profesional', 'abandono', 'cancelacion_profesi
 /**
  * Normaliza un texto de hasta 4000 caracteres y exige contenido. Usa el mensaje del llamador
  * para rechazar explicaciones o fundamentos vacíos.
+ *
+ * @param {string} value - Texto obligatorio de hasta 4000 caracteres.
+ * @param {string} label - Mensaje de error cuando el contenido está vacío.
+ * @returns {string} Texto recortado con contenido.
+ * @throws {Error} Error 400 ante texto vacío o longitud/tipo inválidos.
+ * @example
+ * required("  Solicito revisión  ", "Explica lo ocurrido.");
  */
 function required(value, label) {
   const result = text(value || '', 4000);
@@ -31,6 +38,14 @@ function required(value, label) {
 /**
  * Agrega un evento con autor, tipo, texto y fecha a case_events. La secuencia generada por
  * PostgreSQL permite distinguir decisión y conformidad incluso con igual milisegundo.
+ *
+ * @param {string} id - Identificador del reclamo o mediación.
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {string} kind - Clase de evento: apertura, respuesta, propuesta u otra admitida por el llamador.
+ * @param {string} body - Contenido del evento.
+ * @returns {Promise<void>} Persiste un evento con autor, fecha y secuencia.
+ * @example
+ * await event(caseId, req, "respuesta", "Adjunto antecedentes de la atención.");
  */
 async function event(id, req, kind, body) {
   await db.prepare('INSERT INTO case_events(id,case_id,actor,kind,body,created_at) VALUES(?,?,?,?,?,?)').run(S.id('evt'), id, req.user?.id || 'system', kind, body, Date.now());
@@ -38,6 +53,13 @@ async function event(id, req, kind, body) {
 /**
  * Carga un reclamo y reutiliza access para limitarlo a los participantes de su reserva o
  * administración. Devuelve la fila o lanza un error de acceso.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {string} id - Identificador de incidents.
+ * @returns {Promise<Object>} Reclamo accesible por la persona autenticada.
+ * @throws {Error} Error 401/403/404 por falta de acceso o caso inexistente.
+ * @example
+ * const claim = await incident(req, req.params.id);
  */
 async function incident(req, id) {
   const i = await db.prepare('SELECT * FROM incidents WHERE id=?').get(id);
@@ -49,6 +71,17 @@ async function incident(req, id) {
  * Abre un caso si no existe otro sin resolver para la reserva, fija plazos hábiles y registra
  * apertura y avisos. Devuelve su id; el caso pendiente bloquea liquidaciones mediante las
  * comprobaciones de pago.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {Object} b - Reserva previamente autorizada.
+ * @param {string} category - Categoría validada por la ruta.
+ * @param {string} body - Fundamento del reclamo.
+ * @param {string} [evidence=""] - Descripción de antecedentes o evidencia.
+ * @param {string} [remedy="revision"] - Solución solicitada.
+ * @returns {Promise<string>} ID del reclamo insertado con plazos, evento y avisos.
+ * @throws {Error} Error 409 si la reserva tiene otro reclamo sin resolver.
+ * @example
+ * const id = await createIncident(req, bookingRow, "calidad", "El entregable requiere revisión");
  */
 async function createIncident(req, b, category, body, evidence = '', remedy = 'revision') {
   if (await db.prepare("SELECT 1 FROM incidents WHERE booking_id=? AND status<>'resuelta'").get(b.id)) S.fail(409, 'Ya existe un reclamo abierto. Agrega tu respuesta al caso.');
@@ -61,6 +94,13 @@ async function createIncident(req, b, category, body, evidence = '', remedy = 'r
 /**
  * Comprueba que el servicio exista y que lo consulte su profesional propietario o un
  * administrador de la aplicación administrativa. Devuelve la fila privada del servicio.
+ *
+ * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
+ * @param {string} id - ID del servicio solicitado.
+ * @returns {Promise<Object>} Fila privada de services accesible para su profesional o administración.
+ * @throws {Error} Error 401/403/404 por sesión, propiedad o servicio inexistente.
+ * @example
+ * const service = await serviceAccess(req, req.params.id);
  */
 async function serviceAccess(req, id) {
   const s = await db.prepare('SELECT * FROM services WHERE id=?').get(id);
@@ -75,6 +115,12 @@ async function serviceAccess(req, id) {
  * Registra confirmación sin evaluación, reclamos, respuestas, apelaciones, decisiones,
  * suspensión, mediación y operaciones pendientes. Resolver un caso no ejecuta una transferencia
  * o devolución: exige las acciones y conformidades correspondientes.
+ *
+ * @param {import("express").Express} app - Aplicación pública o administrativa que recibe los manejadores HTTP.
+ * @returns {void} Registra rutas y middleware en app; no inicia el servidor.
+ * @example
+ * // Durante la construcción de la aplicación Express:
+ * routes(app);
  */
 function routes(app) {
   /**
@@ -345,6 +391,11 @@ function routes(app) {
  * Revisa reservas pagadas sin entrega por más de 24 horas, entregas sin confirmar por tres días
  * y casos vencidos. Crea una revisión de abandono solo si no había incidentes y encola avisos
  * deduplicados; no atribuye culpa ni libera dinero.
+ *
+ * @param {number} [now=Date.now()] - Reloj de evaluación de plazos en milisegundos Unix.
+ * @returns {Promise<void>} Detecta casos que requieren seguimiento y registra avisos sin duplicarlos.
+ * @example
+ * await sweep(Date.now());
  */
 async function sweep(now = Date.now()) {
   await db.transaction(async () => {

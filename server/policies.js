@@ -11,6 +11,11 @@ const VERSION = '2026-10-v2';
  * Construye la política que se guarda con cada nueva reserva: devolución temprana de 100% con 48
  * horas, tramo tardío configurable, tolerancia y plazos de reclamo. Congela valores para que
  * cambios futuros no alteren lo acordado.
+ *
+ * @param {Object} settings - Configuración actual de la plataforma.
+ * @returns {Object} Copia de la política para conservarla en una nueva reserva.
+ * @example
+ * const savedPolicy = snapshot(settings);
  */
 function snapshot(settings) {
   return {version:VERSION,earlyHours:48,earlyRefund:100,lateRefund:settings.default_cancellation_refund_percent,
@@ -20,12 +25,23 @@ function snapshot(settings) {
 /**
  * Deserializa policy_snapshot de la reserva y devuelve null si no existe. Las reservas antiguas
  * sin versión utilizan los campos heredados para calcular devoluciones.
+ *
+ * @param {Object} b - Reserva con policy_snapshot en JSON o ausente.
+ * @returns {Object|null} Política guardada; null identifica condiciones heredadas.
+ * @example
+ * policy({policy_snapshot:null}); // null
  */
 function policy(b) { return JSON.parse(b.policy_snapshot || 'null'); }
 /**
  * Calcula la devolución voluntaria usando el inicio de la dedicación, que incluye preparación.
  * Aplica el tramo temprano o tardío guardado y conserva refund_policy_percent para reservas sin
  * política versionada.
+ *
+ * @param {Object} b - Reserva con start_at, política y porcentaje heredado.
+ * @param {number} [now=Date.now()] - Instante de cálculo en milisegundos Unix.
+ * @returns {number} Porcentaje de devolución aplicable según anticipación y política guardada.
+ * @example
+ * const percent = refundPercent(bookingRow, Date.now());
  */
 function refundPercent(b,now=Date.now()) {
   const p=policy(b);
@@ -34,6 +50,12 @@ function refundPercent(b,now=Date.now()) {
 /**
  * Avanza el número indicado de días excluyendo sábados y domingos según America/Santiago.
  * Devuelve milisegundos Unix; no consulta feriados y conserva el avance horario UTC del Date.
+ *
+ * @param {number} days - Cantidad de días hábiles que se agregan; omite sábado y domingo.
+ * @param {number} [now=Date.now()] - Instante inicial en milisegundos Unix.
+ * @returns {number} Fecha límite Unix en milisegundos; no consulta un calendario de feriados.
+ * @example
+ * const deadline = businessDeadline(2);
  */
 function businessDeadline(days,now=Date.now()) {
   const d=new Date(now);

@@ -20,6 +20,15 @@ const { clpPrice } = require('../public/js/input-validation');
 /**
  * Convierte el valor a número y exige un entero dentro del intervalo inclusivo. Lanza 400 usando
  * la etiqueta del campo para explicar el error.
+ *
+ * @param {number|string} v - Valor convertible a número.
+ * @param {number} min - Límite inferior incluido.
+ * @param {number} max - Límite superior incluido.
+ * @param {string} label - Nombre del campo para el mensaje de error.
+ * @returns {number} Entero dentro de [min, max].
+ * @throws {Error} Error 400 si no es entero o queda fuera del intervalo.
+ * @example
+ * integer("60", 15, 720, "Duración"); // 60
  */
 function integer(v, min, max, label) {
   const n = Number(v);
@@ -29,6 +38,12 @@ function integer(v, min, max, label) {
 /**
  * Convierte y valida un porcentaje finito entre 0 y 100, inclusive. Permite decimales; la
  * columna de destino determina cómo se almacena.
+ *
+ * @param {number|string} v - Porcentaje convertible a número, con decimales permitidos.
+ * @returns {number} Número finito entre 0 y 100, incluidos.
+ * @throws {Error} Error 400 para NaN, infinito o valor fuera del rango.
+ * @example
+ * percent("15.5"); // 15.5
  */
 function percent(v) {
   const n = Number(v);
@@ -39,6 +54,22 @@ function percent(v) {
  * Normaliza título, descripción, precio CLP, etiquetas y duración del servicio. Valida rangos y
  * exige que atención, preparación y seguimiento sumen como máximo un día; devuelve el objeto
  * apto para guardar como borrador.
+ *
+ * @param {Object} b - Campos propuestos para un servicio; no se escribe la base.
+ * @param {string} b.title - Título obligatorio, máximo 180 caracteres.
+ * @param {string} b.description - Descripción obligatoria, máximo 5000 caracteres.
+ * @param {number|string} b.price - Precio CLP entero entre 1 y 100000000; admite $35.000.
+ * @param {number} [b.durationMinutes=60] - Atención de 15 a 720 minutos.
+ * @param {number} [b.prepMinutes=0] - Preparación de 0 a 720 minutos.
+ * @param {number} [b.followupMinutes=0] - Seguimiento de 0 a 720 minutos.
+ * @param {string[]} [b.tags=[]] - Hasta 20 etiquetas de máximo 50 caracteres.
+ * @param {string} [b.category="Consultoría"] - Categoría de hasta 80 caracteres.
+ * @param {string} [b.modality="Remoto"] - Modalidad de hasta 80 caracteres.
+ * @returns {Object} Borrador normalizado; dedicación total máxima de 1440 minutos.
+ * @throws {Error} Error 400 por campos inválidos o dedicación total superior a un día.
+ * @example
+ * const draft = validateService({title:"Asesoría", description:"Diagnóstico", price:"$35.000"});
+ * // draft.price === 35000; draft.durationMinutes === 60
  */
 function validateService(b) {
   const title = text(b.title, 180),
@@ -63,6 +94,11 @@ function validateService(b) {
 /**
  * Convierte una fila de professionals al contrato camelCase de los paneles privados. Deserializa
  * antecedentes y disponibilidad e incluye revisión, capacidad, bloqueos y suspensión.
+ *
+ * @param {Object} p - Fila professionals con JSON válido en tags, validation y availability.
+ * @returns {Object} Perfil privado en camelCase con revisión, capacidad y antecedentes.
+ * @example
+ * const view = professional(professionalRow);
  */
 function professional(p) {
   return {
@@ -100,6 +136,13 @@ function professional(p) {
  * Construye la representación pública publicada o la privada del borrador. La vista privada
  * agrega propietario, observaciones, hash de revisión y comisión efectiva; la pública no agrega
  * nombre ni antecedentes del profesional.
+ *
+ * @param {Object} s - Fila services con professional_id y borrador/publicación JSON.
+ * @param {boolean} [privateView=false] - true selecciona el borrador y agrega información de gestión.
+ * @returns {Promise<Object>} Representación pública publicada o privada; el profesional asociado debe existir.
+ * @example
+ * const publicView = await serviceView(serviceRow);
+ * const privateView = await serviceView(serviceRow, true);
  */
 async function serviceView(s, privateView = false) {
   const p = await db.prepare('SELECT * FROM professionals WHERE id=?').get(s.professional_id);
@@ -127,6 +170,12 @@ async function serviceView(s, privateView = false) {
  * Registra catálogo, borradores, disponibilidad, revisión de servicios, perfiles y
  * configuración. Selecciona datos por rol y conserva la versión publicada hasta que Skilly
  * aprueba la nueva revisión.
+ *
+ * @param {import("express").Express} app - Aplicación pública o administrativa que recibe los manejadores HTTP.
+ * @returns {void} Registra rutas y middleware en app; no inicia el servidor.
+ * @example
+ * // Durante la construcción de la aplicación Express:
+ * servicesRoutes(app);
  */
 function servicesRoutes(app) {
   /**
