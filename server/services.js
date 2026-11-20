@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Servicios independientes del perfil. draft guarda la propuesta editable y
+ * @file Servicios independientes del perfil. draft guarda la propuesta editable y
  * published la última aprobada; una revisión usa el hash del borrador. Las comisiones pueden ser
  * particulares o heredar settings y quedan congeladas al reservar.
  */
@@ -300,6 +300,12 @@ function servicesRoutes(app) {
    * Actualiza disponibilidad, jornada, capacidad y antecedentes del perfil autorizado. El modo
    * administrativo permite además revisar, recomendar y asignar responsable; reenviar antecedentes
    * vuelve el perfil a pendiente y la revisión administrativa puede notificar por correo.
+   *
+   * @param {import("express").Request} req - Solicitud con params.id, sesión y parche del perfil en body.
+   * @param {import("express").Response} res - Recibe el perfil actualizado y notificationEmailSent.
+   * @param {boolean} adminMode - Habilita la comprobación y los campos de administración.
+   * @returns {Promise<void>} Envía el perfil como JSON después de guardar los cambios.
+   * @throws {Error} Propaga errores de permisos, perfil inexistente, validación y persistencia.
    */
   async function updateProfessional(req, res, adminMode) {
     if (adminMode) S.admin(req);else S.requireRole(req, 'profesional');

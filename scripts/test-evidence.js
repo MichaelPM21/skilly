@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Ejecuta comprobación sintáctica y suites, guarda salida TAP e informe de
+ * @file Ejecuta comprobación sintáctica y suites, guarda salida TAP e informe de
  * resultados locales. No equipara porcentaje de casos aprobados con cobertura, usabilidad o
  * validación real de proveedores.
  */
@@ -20,6 +20,9 @@ fs.writeFileSync(path.join(directory,'sintaxis.txt'),(check.stdout||'')+(check.s
 /**
  * Extrae un contador numérico de la salida TAP mediante su nombre, devolviendo cero si no
  * aparece. Alimenta el informe de pruebas, no un cálculo de cobertura de código.
+ *
+ * @param {string} name - Nombre de contador TAP buscado en output.
+ * @returns {number} Contador encontrado o cero.
  */
 const stat=name=>Number(output.match(new RegExp('^# '+name+' ([0-9.]+)$','m'))?.[1]||0);
 const tests=stat('tests'),passed=stat('pass'),failed=stat('fail');

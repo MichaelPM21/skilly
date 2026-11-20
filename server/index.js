@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Entrada HTTP compartida. createApp configura seguridad y rutas; start migra
+ * @file Entrada HTTP compartida. createApp configura seguridad y rutas; start migra
  * PostgreSQL, abre el puerto y, en la aplicación pública, inicia el seguimiento. Flujo de
  * petición: cuerpo → sesión → origen/rol → módulo de negocio → respuesta o error.
  */
@@ -35,6 +35,11 @@ const {
  * Construye una aplicación Express pública o administrativa sin abrir un puerto. Instala
  * cabeceras, lectura de cuerpos, autenticación, protección de origen, rutas de negocio, archivos
  * estáticos y manejo de errores; ambas variantes comparten PostgreSQL.
+ *
+ * @param {string} [kind="public"] - Audiencia de la aplicación; usar public o admin.
+ * @returns {import("express").Express} Instancia configurada; no abre puertos hasta llamar a listen.
+ * @example
+ * const app = createApp("public");
  */
 function createApp(kind = 'public') {
   const app = express();
@@ -154,6 +159,12 @@ function createApp(kind = 'public') {
  * Aplica la migración, inicia el puerto correspondiente y registra el cierre ordenado. Solo el
  * proceso público arranca el seguimiento de reclamos y la cola de correo; devuelve el servidor
  * HTTP.
+ *
+ * @param {string} [kind] - public o admin; por defecto se obtiene de APP_KIND.
+ * @returns {Promise<import("node:http").Server>} Servidor creado; errores posteriores del listener se manejan por su evento error.
+ * @throws {Error} Propaga fallos de migración o preparación del trabajador; no rechaza por todos los errores posteriores de escucha.
+ * @example
+ * const server = await start("public");
  */
 async function start(kind = process.env.APP_KIND === 'admin' ? 'admin' : 'public') {
   await migrate();
@@ -170,6 +181,10 @@ async function start(kind = process.env.APP_KIND === 'admin' ? 'admin' : 'public
   /**
    * Deja de aceptar conexiones HTTP y cierra el pool cuando termina el servidor. Atiende SIGINT y
    * SIGTERM del proceso.
+   *
+   * @returns {import("node:http").Server} Resultado de server.close; el cierre del pool se solicita en su callback.
+   * @example
+   * process.once("SIGTERM", stop);
    */
   const stop = () => server.close(/* Continúa el cierre del proceso o pool después de que el servidor deje de atender conexiones. */ () => db.close().catch(() => {
     // Ignora el error durante la limpieza final para no sustituir el resultado principal de la operación.

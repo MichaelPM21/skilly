@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Acceso PostgreSQL asíncrono. Conserva prepare/get/all/run para los módulos
+ * @file Acceso PostgreSQL asíncrono. Conserva prepare/get/all/run para los módulos
  * existentes y propaga transacciones mediante AsyncLocalStorage. Los valores SQL se parametrizan
  * y el bloqueo asesor serializa las transacciones de negocio de ambos procesos.
  */
@@ -71,6 +71,10 @@ async function query(text,values=[]) {return (context.getStore()?.client||pool).
  * Ejecuta una operación atómica: la transacción principal toma un bloqueo asesor compartido por
  * ambos procesos; una llamada anidada utiliza SAVEPOINT. Confirma el resultado o revierte y
  * propaga el error, liberando la conexión.
+ *
+ * @param {function(): *} fn - Operación cuyo resultado se confirma junto con la transacción.
+ * @returns {Promise<*>} Resultado de fn después de confirmar o liberar el SAVEPOINT.
+ * @throws {Error} Propaga errores de la operación y del driver PostgreSQL.
  */
 async function transaction(fn) {
   if(context.getStore()) {
@@ -105,6 +109,10 @@ const db={
     /**
      * Vincula los argumentos de una consulta preparada a sus marcadores SQL y devuelve la promesa de
      * ejecución sobre la conexión activa.
+     *
+     * @param {Array<*>} args - Argumentos posicionales o un único objeto de parámetros nombrados.
+     * @returns {Promise<import("pg").QueryResult>} Resultado del driver.
+     * @throws {Error} Propaga errores de vinculación de parámetros y de PostgreSQL.
      */
     const execute=args=>{const q=bind(sql,args);return query(q.text,q.values);};
     return {
@@ -129,6 +137,10 @@ const db={
       /**
        * Ejecuta la sentencia y resuelve changes con el número de filas afectadas y lastInsertRowid con
        * el id devuelto por RETURNING, si existe.
+       *
+       * @param {...*} args - Valores compatibles con los marcadores de la sentencia.
+       * @returns {Promise<{changes: number|null, lastInsertRowid: *}>} Filas afectadas e id de la primera fila retornada, o undefined si no existe.
+       * @throws {Error} Propaga errores de parámetros y ejecución SQL.
        */
       async run(...args){const r=await execute(args);return {changes:r.rowCount,lastInsertRowid:r.rows[0]?.id};}
     };
@@ -137,8 +149,20 @@ const db={
    * Conserva la interfaz db.transaction(fn).immediate() usada por los módulos de negocio. Devuelve
    * una función invocable que abre una transacción PostgreSQL; immediate es un alias de esa misma
    * función.
+   *
+   * @param {Function} fn - Función de negocio que recibirá los argumentos de la función resultante.
+   * @returns {Function} Función que resuelve el resultado de fn en una transacción; immediate referencia la misma función.
+   * @example
+   * const operation = db.transaction(async value => value);
+   * const result = await operation.immediate(7);
    */
-  transaction(fn){/* Propaga los argumentos recibidos a la función de negocio dentro de una transacción. La misma referencia se expone como immediate para compatibilidad con los llamadores. */ const run=(...args)=>transaction(/* Invoca la función de negocio con sus argumentos dentro de la conexión y transacción activas. */ ()=>fn(...args));run.immediate=run;return run;},
+  transaction(fn){/**
+   * Propaga los argumentos recibidos a la función de negocio dentro de una transacción. La misma referencia se expone como immediate para compatibilidad con los llamadores.
+   *
+   * @param {...*} args - Argumentos que se propagan a fn.
+   * @returns {Promise<*>} Resultado de fn tras completar la transacción.
+   * @throws {Error} Propaga errores de fn y de PostgreSQL.
+   */ const run=(...args)=>transaction(/* Invoca la función de negocio con sus argumentos dentro de la conexión y transacción activas. */ ()=>fn(...args));run.immediate=run;return run;},
   /**
    * Ejecuta SQL sin parámetros a través de query. Se utiliza principalmente para DDL y control de
    * migraciones; no debe recibir texto construido con datos no validados del usuario.
@@ -164,6 +188,11 @@ const db={
 /**
  * Devuelve un identificador compuesto por prefijo y UUID sin guiones. Es una utilidad de
  * compatibilidad; los módulos de negocio actuales usan principalmente security.id.
+ *
+ * @param {string} prefix - Prefijo del identificador.
+ * @returns {string} Prefijo, guion bajo y UUID sin guiones.
+ * @example
+ * const value = uid("usr");
  */
 const uid=prefix=>prefix+'_'+randomUUID().replaceAll('-','');
 /**

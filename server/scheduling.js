@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Agenda compartida por todos los servicios de un profesional, en
+ * @file Agenda compartida por todos los servicios de un profesional, en
  * America/Santiago. Intervalo reservado: preparación + atención + seguimiento. Se comprueban
  * jornada, bloqueos, cupos y solapamientos antes de crear o reprogramar.
  */

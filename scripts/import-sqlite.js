@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Importación de una sola vez: SQLite en modo lectura → validación →
+ * @file Importación de una sola vez: SQLite en modo lectura → validación →
  * PostgreSQL vacío → comparación de contenido → commit. Es la única ruta de aplicación que lee
  * datos del motor anterior.
  */
@@ -12,11 +12,21 @@ const Database=require('better-sqlite3');
 /**
  * Escapa comillas dobles de un identificador y lo delimita para construir nombres de tablas y
  * columnas. No sustituye la parametrización de valores.
+ *
+ * @param {string} name - Nombre de tabla o columna que requiere comillas SQL.
+ * @returns {string} Identificador delimitado; las comillas internas se duplican.
+ * @example
+ * quote("users"); // "users" con comillas de identificador
  */
 const quote=name=>'"'+name.replaceAll('"','""')+'"';
 /**
  * Calcula SHA-256 de filas normalizadas: ordena sus claves y convierte buffers a hexadecimal.
  * Permite comparar el contenido SQLite con PostgreSQL sin depender del orden de propiedades.
+ *
+ * @param {Object[]} rows - Filas ordenadas de forma equivalente en origen y destino.
+ * @returns {string} SHA-256 hexadecimal de los valores con claves ordenadas y buffers normalizados.
+ * @example
+ * const checksum = digest([{id:1, name:"Demo"}]);
  */
 const digest=rows=>crypto.createHash('sha256').update(JSON.stringify(rows.map(/* Transforma cada elemento con Object.keys(row).sort().map(k=>[k,Buffer.isBuffer(row[k])?{hex:row[k].toString('hex')}:row[k]]) para construir la colección utilizada por esta operación. */ row=>Object.keys(row).sort().map(/* Transforma cada elemento con [k,Buffer.isBuffer(row[k])?{hex:row[k].toString('hex')}:row[k]] para construir la colección utilizada por esta operación. */ k=>[k,Buffer.isBuffer(row[k])?{hex:row[k].toString('hex')}:row[k]])))).digest('hex');
 /**
@@ -24,6 +34,13 @@ const digest=rows=>crypto.createHash('sha256').update(JSON.stringify(rows.map(/*
  * PostgreSQL sin datos de negocio. Importa todas las filas en una transacción, normaliza
  * referencias heredadas, verifica hashes y ajusta secuencias; devuelve un informe o revierte
  * ante errores.
+ *
+ * @param {string} sourcePath - Ruta a una base SQLite existente que se abre solo para lectura.
+ * @returns {Promise<Object[]>} Por tabla: table, sourceRows, targetRows, sha256 y normalized; no escribe este informe por sí misma.
+ * @throws {Error} Error ante origen inválido, destino no vacío, diferencias de esquema o contenido; propaga errores de BD. La transacción de importación revierte al fallar.
+ * @example
+ * // Solo contra un destino PostgreSQL vacío preparado para la migración:
+ * const result = await importSqlite(sourcePath);
  */
 async function importSqlite(sourcePath){
   const {db}=require('../server/db');

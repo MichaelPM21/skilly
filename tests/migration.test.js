@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Prueba de importación SQLite → PostgreSQL con origen temporal y esquema
+ * @file Prueba de importación SQLite → PostgreSQL con origen temporal y esquema
  * aislado. Verifica rollback, contenido y conservación de referencias y secuencias.
  */
 

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Migración inicial PostgreSQL con registro de versión y comprobación de
+ * @file Migración inicial PostgreSQL con registro de versión y comprobación de
  * integridad del SQL. No editar el SQL inicial después de aplicarlo: el código detecta ese
  * cambio; futuras modificaciones requieren una migración nueva.
  */
@@ -12,6 +12,11 @@ const {db}=require('./db');
  * Aplica el esquema inicial PostgreSQL una sola vez, dentro de una transacción. Guarda su hash
  * normalizando CRLF, rechaza cambios posteriores del SQL ya aplicado y asegura la fila de
  * settings sin crear cuentas demo.
+ *
+ * @returns {Promise<void>} Aplica o verifica la migración y asegura settings; no crea cuentas.
+ * @throws {Error} Error si cambió el SQL inicial ya aplicado; propaga errores de lectura y PostgreSQL.
+ * @example
+ * await migrate();
  */
 async function migrate(){
   const sql=fs.readFileSync(path.join(__dirname,'../database/postgres/001-initial.sql'),'utf8');

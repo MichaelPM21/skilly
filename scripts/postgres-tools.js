@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Resolución y ejecución de herramientas PostgreSQL para
+ * @file Resolución y ejecución de herramientas PostgreSQL para
  * respaldo/restauración. Las credenciales vienen de DATABASE_URL y se entregan al proceso por
  * variables de entorno.
  */
@@ -11,6 +11,11 @@ const run=require('node:util').promisify(execFile);
 /**
  * Resuelve el ejecutable PostgreSQL desde PG_BIN, instalaciones de Windows ordenadas por versión
  * o PATH. Devuelve la ruta sin ejecutar el programa.
+ *
+ * @param {string} name - Nombre de utilidad, por ejemplo pg_dump o pg_restore.
+ * @returns {string} Ruta preferida o nombre para resolución por PATH; no comprueba todos los destinos.
+ * @example
+ * const executable = binary("pg_dump");
  */
 function binary(name){
   if(process.env.PG_BIN)return path.join(process.env.PG_BIN,name+(process.platform==='win32'?'.exe':''));
@@ -24,6 +29,13 @@ function binary(name){
  * Ejecuta una utilidad PostgreSQL usando DATABASE_URL para preparar variables PG*. Pasa la
  * contraseña por el entorno, no por los argumentos, oculta ventanas auxiliares y devuelve el
  * resultado de execFile.
+ *
+ * @param {string} name - Utilidad PostgreSQL a ejecutar.
+ * @param {string[]} args - Argumentos, añadidos después de --no-password.
+ * @returns {Promise<{stdout: string, stderr: string}>} Salida del proceso ejecutado con las variables PG* derivadas de DATABASE_URL.
+ * @throws {Error} Propaga URL inválida, ejecutable ausente, salida excesiva o código de proceso no satisfactorio.
+ * @example
+ * const output = await pgTool("pg_dump", ["--version"]);
  */
 async function pgTool(name,args){
   const url=new URL(process.env.DATABASE_URL);

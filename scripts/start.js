@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. npm start inicia dos procesos Node con el mismo entorno: público y
+ * @file npm start inicia dos procesos Node con el mismo entorno: público y
  * administración. Las señales y salidas con error cierran los hijos; no incluye recarga
  * automática al editar archivos.
  */
@@ -9,6 +9,8 @@ const children=['server/index.js','server/admin.js'].map(/* Inicia cada aplicaci
 /**
  * Solicita la terminación de los dos procesos hijos, público y administrativo. Se usa al recibir
  * una señal o detectar la salida con error de uno de ellos.
+ *
+ * @returns {void} Solicita terminar los procesos hijos; no espera su cierre.
  */
 function stop(){for(const child of children)child.kill();}
 process.on('SIGINT',stop);process.on('SIGTERM',stop);

@@ -1,32 +1,21 @@
 /**
- * Flujo del módulo. Módulo heredado de correo directo, conservado en el repositorio. No está
+ * @file Módulo heredado de correo directo, conservado en el repositorio. No está
  * requerido por el servidor vigente: los flujos actuales usan notifications.js y outbox. Sus
  * textos de publicación y registro describen una versión anterior.
  */
 
-// ============================================================
-// Notificaciones por correo a Skilly (Gmail)
-// ------------------------------------------------------------
-// Se usa cuando una organización agenda un profesional SIN
-// registrarse: en vez de crear una cuenta, se le avisa por correo
-// al equipo de Skilly para que gestione manualmente el contacto,
-// el método de pago, etc.
-//
-// Requiere configurar en tu archivo .env:
-//   GMAIL_USER=tu-cuenta@gmail.com
-//   GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   (Contraseña de aplicación, NO tu clave normal)
-//   ADMIN_NOTIFICATION_EMAIL=admin@skilly.cl  (a quién le llega el aviso; por defecto GMAIL_USER)
-//
-// Cómo generar una "Contraseña de aplicación" de Gmail:
-//   1. Activa la verificación en dos pasos en la cuenta de Gmail que usarás para enviar.
-//   2. Ve a https://myaccount.google.com/apppasswords
-//   3. Crea una nueva contraseña de aplicación (nombre sugerido: "Skilly").
-//   4. Copia el código de 16 caracteres y pégalo en GMAIL_APP_PASSWORD (con o sin espacios).
-//
-// Si no configuras estas variables, el servidor sigue funcionando:
-// la solicitud queda guardada en la base de datos igual, solo que
-// no se envía el correo (se registra en la consola del servidor).
-// ============================================================
+/**
+ * Configuración del transporte Gmail heredado.
+ *
+ * GMAIL_USER y GMAIL_APP_PASSWORD habilitan el transporte; se eliminan los
+ * espacios de la contraseña de aplicación. ADMIN_NOTIFICATION_EMAIL define
+ * el destinatario administrativo y, si falta, se utiliza GMAIL_USER.
+ * Sin credenciales, las funciones de envío devuelven sent=false.
+ * Este módulo no persiste solicitudes: esa responsabilidad corresponde al llamador.
+ * Los flujos vigentes utilizan notifications.js y la bandeja outbox.
+ *
+ * @see https://myaccount.google.com/apppasswords
+ */
 
 const nodemailer = require('nodemailer');
 
@@ -34,6 +23,10 @@ let transporter = null;
 /**
  * Crea y reutiliza un transporte Gmail si hay credenciales, o devuelve null. Este módulo es
  * heredado; el flujo actual usa notifications.js y su cola persistente.
+ *
+ * @returns {Object|null} Transporte Gmail reutilizado o null si faltan variables de entorno.
+ * @example
+ * const transport = getTransporter();
  */
 function getTransporter() {
   if (transporter) return transporter;
@@ -51,6 +44,10 @@ function getTransporter() {
 /**
  * Indica si existen las dos variables de Gmail, sin probar su validez. Esta utilidad pertenece
  * al módulo de correo heredado.
+ *
+ * @returns {boolean} true si existen ambas variables de Gmail, sin autenticarlas.
+ * @example
+ * const configured = isConfigured();
  */
 function isConfigured() {
   return !!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
@@ -59,6 +56,13 @@ function isConfigured() {
 /**
  * Construye texto y HTML para avisar a Skilly de una solicitud invitada y los envía directamente
  * por Gmail. Resuelve sent/reason; no participa en la cola actual ni en sus reintentos.
+ *
+ * @param {Object} request - Solicitud heredada con id, orgName, professionalName, date, time, contactName y email.
+ * @param {string} [request.phone] - Teléfono de contacto opcional.
+ * @param {string} [request.notes] - Notas opcionales de la solicitud.
+ * @returns {Promise<{sent: boolean, reason: (string|undefined)}>} sent indica aceptación SMTP; reason explica falta de configuración o fallo de envío.
+ * @example
+ * const result = await sendGuestRequestEmail(guestRequest);
  */
 async function sendGuestRequestEmail(request) {
   const t = getTransporter();
@@ -120,6 +124,12 @@ Gestiona esta solicitud desde el panel de administración de Skilly, pestaña "S
  * Construye el aviso de aprobación, rechazo o información faltante y lo envía directamente. Es
  * una implementación heredada: la revisión actual usa notifications.js y separa perfil de
  * publicación.
+ *
+ * @param {Object} professional - Perfil heredado con name, email y status.
+ * @param {string} [professional.adminNotes] - Observaciones que se incorporan al aviso.
+ * @returns {Promise<{sent: boolean, reason: (string|undefined)}>} Resultado del intento; no garantiza recepción final del destinatario.
+ * @example
+ * const result = await sendProfessionalStatusEmail(profile);
  */
 async function sendProfessionalStatusEmail(professional) {
   const t = getTransporter();
@@ -157,6 +167,11 @@ async function sendProfessionalStatusEmail(professional) {
 /**
  * Escapa caracteres con significado en HTML al interpolar datos en las plantillas heredadas de
  * correo.
+ *
+ * @param {*} s - Valor convertido a texto; null y undefined se tratan como vacío.
+ * @returns {string} Texto con &, <, >, comillas y apóstrofos escapados.
+ * @example
+ * escapeHtml("<b>"); // &lt;b&gt;
  */
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, /* Sustituye cada carácter especial por su entidad HTML para interpolar texto sin convertirlo en etiquetas. */ c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

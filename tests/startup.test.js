@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Pruebas de migración concurrente, alta administrativa y
+ * @file Pruebas de migración concurrente, alta administrativa y
  * respaldo/restauración en PostgreSQL de prueba. Requieren pg_dump/pg_restore; la eliminación
  * del esquema se limita al creado por postgres-helper.
  */

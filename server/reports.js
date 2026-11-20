@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Informes administrativos calculados desde tablas operativas. Los totales se
+ * @file Informes administrativos calculados desde tablas operativas. Los totales se
  * agrupan por estado y correo; no sustituyen conciliación de pasarela, contabilidad de
  * comisiones ni prueba de transferencias externas.
  */
@@ -32,6 +32,11 @@ function reports(app) {
   /**
    * Adapta la comprobación administrativa como middleware de Express, continuando con next o
    * entregándole el error de permisos.
+   *
+   * @param {import("express").Request} req - Solicitud que contiene la sesión.
+   * @param {import("express").Response} res - Respuesta HTTP; no se modifica directamente.
+   * @param {import("express").NextFunction} next - Continúa el middleware o recibe el error de permisos.
+   * @returns {void} Delega el control en next.
    */
   const requireAdmin = (req, res, next) => {
     try {
@@ -44,6 +49,9 @@ function reports(app) {
   /**
    * Transforma una reserva usando la vista administrativa para el historial incluido en el informe
    * de organizaciones. El acceso a la ruta ya fue autorizado por requireAdmin.
+   *
+   * @param {Object} b - Fila de bookings.
+   * @returns {Promise<Object>} Vista administrativa de la reserva.
    */
   const rowToBooking = async b => await bookingView({
     user: {
@@ -110,11 +118,20 @@ function reports(app) {
     /**
      * Cuenta los elementos que cumplen el predicado recibido para construir un indicador del
      * dashboard.
+     *
+     * @param {Object[]} arr - Registros del indicador.
+     * @param {function(Object): boolean} pred - Criterio de selección.
+     * @returns {number} Cantidad de registros que cumplen el criterio.
      */
     const count = (arr, pred) => arr.filter(pred).length;
     /**
      * Suma el campo indicado de los registros que cumplen el predicado, usando amount por defecto y
      * cero para valores ausentes.
+     *
+     * @param {Object[]} arr - Registros con importes numéricos.
+     * @param {function(Object): boolean} pred - Criterio de selección.
+     * @param {string} [field="amount"] - Campo que se suma.
+     * @returns {number} Total del campo seleccionado; valores falsy aportan cero.
      */
     const sum = (arr, pred, field = 'amount') => arr.filter(pred).reduce(/* Acumula s + (p[field] || 0) sobre la colección seleccionada para calcular su resumen. */ (s, p) => s + (p[field] || 0), 0);
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;

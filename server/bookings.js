@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Ciclo principal: gestion_skilly (invitado) → solicitado → aceptado → pagado
+ * @file Ciclo principal: gestion_skilly (invitado) → solicitado → aceptado → pagado
  * → entregado → confirmado → completado. Este módulo crea solicitudes y gestiona agenda,
  * entrega, chat y documentos; pagos y políticas completan las otras transiciones.
  */
@@ -53,7 +53,7 @@ async function access(req, id) {
  * @param {import("express").Request} req - Solicitud Express; la autenticación previa agrega user y session.
  * @param {Object} b - Fila de reserva ya cargada para comprobar titularidad.
  * @returns {Promise<void>} No devuelve datos; autoriza al cliente o invitado de esa reserva.
- * @throws {Error} Error 403 para un actor que no sea el cliente autorizado.
+ * @throws {Error} Errores 401/403/404 por sesión, titularidad, rol o reserva inexistente; propaga fallos de consulta.
  * @example
  * await customer(req, booking);
  */

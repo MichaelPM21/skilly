@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Entrada del proceso administrativo: reutiliza index.start con kind=admin,
+ * @file Entrada del proceso administrativo: reutiliza index.start con kind=admin,
  * puerto y cookie propios. Comparte PostgreSQL y módulos de negocio con el sitio público; no
  * ejecuta el trabajador periódico.
  */

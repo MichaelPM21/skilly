@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Pruebas de integridad relacional, parametrización, transacciones anidadas y
+ * @file Pruebas de integridad relacional, parametrización, transacciones anidadas y
  * scripts DDL académicos. Trabajan en esquemas de prueba desechables, nunca sobre tablas de
  * producción.
  */

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Servidor de demostración aislado en puertos 3100/3101 usando un esquema
+ * @file Servidor de demostración aislado en puertos 3100/3101 usando un esquema
  * PostgreSQL de pruebas. Puede importar .local/preview.db si existe; sin ese respaldo no crea
  * automáticamente un perfil para la cuenta profesional demo.
  */

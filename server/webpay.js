@@ -1,36 +1,28 @@
 /**
- * Flujo del módulo. Adaptador del SDK Transbank para crear, confirmar, consultar y devolver
+ * @file Adaptador del SDK Transbank para crear, confirmar, consultar y devolver
  * transacciones. WEBPAY_ENV selecciona integración o producción; payments.js y settlements.js
  * controlan estado local, autorización y conciliación.
  */
 
-// ============================================================
-// Integración de pago real — Webpay Plus (Transbank)
-// ------------------------------------------------------------
-// Usa el SDK oficial de Transbank para Node.js, en el AMBIENTE DE
-// INTEGRACIÓN (pruebas). Transbank publica oficialmente un código
-// de comercio y un API key de prueba para que cualquier
-// desarrollador pueda integrar y probar transacciones reales de
-// principio a fin sin tener un contrato comercial vigente.
-// Fuente: https://www.transbankdevelopers.cl/documentacion/webpay-plus
-//
-// Para tarjetas de prueba (Webpay simula bancos emisores):
-//   https://www.transbankdevelopers.cl/documentacion/como_empezar#ambiente-de-integracion
-//
-// IMPORTANTE — paso a producción:
-// Estas credenciales de integración NUNCA cobran dinero real y no
-// deben usarse en producción. Para producción, Transbank entrega un
-// código de comercio y un API key propios de Skilly tras el proceso
-// de afiliación comercial; ese código se coloca en las variables de
-// entorno WEBPAY_COMMERCE_CODE y WEBPAY_API_KEY, y se cambia
-// buildForIntegration(...) por buildForProduction(...).
-// ============================================================
+/**
+ * Configuración del adaptador Webpay Plus.
+ *
+ * WEBPAY_ENV=production selecciona buildForProduction y exige
+ * WEBPAY_COMMERCE_CODE y WEBPAY_API_KEY. Cualquier otro valor utiliza
+ * buildForIntegration con las credenciales de integración del SDK.
+ * Las operaciones de integración son simuladas y no cobran dinero real.
+ *
+ * @see https://www.transbankdevelopers.cl/documentacion/webpay-plus
+ */
 
 const { WebpayPlus, IntegrationCommerceCodes, IntegrationApiKeys } = require('transbank-sdk');
 
 /**
  * Construye el cliente del SDK para integración o producción según WEBPAY_ENV. Producción exige
  * credenciales propias; integración usa las constantes de prueba del SDK.
+ *
+ * @returns {Object} Cliente Transaction del SDK Transbank para el entorno seleccionado.
+ * @throws {Error} Si producción no tiene código de comercio o API key.
  */
 function buildTransaction() {
   const isProd = process.env.WEBPAY_ENV === 'production';

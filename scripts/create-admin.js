@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Alta local del primer administrador: aplica migración, solicita
+ * @file Alta local del primer administrador: aplica migración, solicita
  * nombre/correo, genera contraseña si no se suministra y guarda su hash. No reemplaza una cuenta
  * existente ni crea una clave compartida.
  */

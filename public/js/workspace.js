@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Capa de interfaz por rol sobre app.js. Reemplaza autenticación local por
+ * @file Capa de interfaz por rol sobre app.js. Reemplaza autenticación local por
  * API, conserva componentes visuales mediante alias y administra paneles, servicios y
  * calendario. policies.js se carga después y amplía reclamos, cancelación y mediación. Ocultar
  * botones no reemplaza permisos del servidor.
@@ -12,6 +12,10 @@ const nativeFetch=window.fetch.bind(window);
  * Envuelve fetch para añadir X-Skilly-Request y credenciales del mismo origen a las solicitudes
  * /api/. Mantiene el transporte original para otras URLs; las autorizaciones siguen en el
  * servidor.
+ *
+ * @param {string|Request} input - URL como texto o Request con propiedad url.
+ * @param {RequestInit} [options={}] - Opciones de fetch; se añaden cabeceras y credenciales a /api/ del mismo origen.
+ * @returns {Promise<Response>} Respuesta de nativeFetch; no valida el estado HTTP.
  */
 window.fetch=(input,options={})=>{
   const url=new URL(typeof input==='string'?input:input.url,location.href);
@@ -38,51 +42,95 @@ async function request(path,body,method='POST') {
 }
 /**
  * Consulta una ruta por GET mediante request, con un sufijo opcional de parámetros.
+ *
+ * @param {string} path - Ruta relativa a /api/.
+ * @param {string} [q=""] - Sufijo de consulta, incluido ? cuando corresponda.
+ * @returns {Promise<*>} JSON de la respuesta.
+ * @throws {Error} Propaga los errores HTTP, de red y de lectura JSON de request.
  */
 Api.list=(path,q='')=>request(path+q,undefined,'GET');
 /**
  * Envía un recurso por POST mediante request. Más abajo se conserva como oldCreate para agregar
  * condiciones a los pagos.
+ *
+ * @param {string} path - Ruta relativa a /api/.
+ * @param {Object} data - Cuerpo JSON enviado sin modificaciones por este adaptador.
+ * @returns {Promise<*>} JSON de la respuesta.
+ * @throws {Error} Propaga los errores HTTP, de red y de lectura JSON de request.
  */
 Api.create=(path,data)=>request(path,data);
 /**
  * Envía un PATCH a la ruta y al id recibidos utilizando el cliente común de solicitudes.
+ *
+ * @param {string} path - Ruta del recurso relativa a /api/.
+ * @param {string} id - Identificador del recurso.
+ * @param {Object} data - Parche JSON.
+ * @returns {Promise<*>} JSON de la respuesta.
+ * @throws {Error} Propaga los errores HTTP, de red y de lectura JSON de request.
  */
 Api.update=(path,id,data)=>request(path+'/'+id,data,'PATCH');
 /**
  * Consulta un recurso con el prefijo admin mediante Api.list. La cookie administrativa y las
  * guardas del servidor determinan el permiso.
+ *
+ * @param {string} path - Ruta relativa a /api/admin/.
+ * @returns {Promise<*>} JSON de la respuesta administrativa.
+ * @throws {Error} Propaga los errores HTTP, de red y de lectura JSON de request.
  */
 Api.adminGet=path=>Api.list('admin/'+path);
 let SERVICES=[],panelTab='inicio',adminSection='inicio',selectedService=null;
 /**
  * Devuelve el elemento del documento con el id indicado o null. Es un atajo compartido por los
  * formularios de los paneles.
+ *
+ * @param {string} id - Identificador DOM.
+ * @returns {HTMLElement|null} Elemento con ese ID o null.
+ * @example
+ * const input = $("loginEmail");
  */
 const $=id=>document.getElementById(id);
 const esc=escapeHtml;
 /**
  * Construye un botón HTML con etiqueta, estilo y acción onclick recibidos. Sus argumentos deben
  * ser fragmentos controlados por los renderizadores; no escapa código arbitrario.
+ *
+ * @param {string} label - Etiqueta HTML de confianza.
+ * @param {string} code - Código de la acción onclick generado por la aplicación.
+ * @param {string} [style="outline"] - Clase visual del botón.
+ * @returns {string} HTML del botón.
  */
 const action=(label,code,style='outline')=>`<button class="btn ${style}" onclick="${code}">${label}</button>`;
 /**
  * Devuelve el bloque HTML de un estado vacío con el mensaje de presentación recibido.
+ *
+ * @param {string} message - Mensaje HTML de confianza.
+ * @returns {string} HTML del mensaje de estado vacío.
  */
 const empty=message=>`<div class="empty">${message}</div>`;
 /**
  * Genera una insignia con clase por estado y su etiqueta escapada. El mapa bookingStatusLabel
  * centraliza los textos de reserva.
+ *
+ * @param {string} s - Código de estado usado como clase CSS y etiqueta.
+ * @returns {string} HTML de la etiqueta con texto escapado.
  */
 const badge=s=>`<span class="statusBadge status-${s}">${esc(bookingStatusLabel(s))}</span>`;
 /**
  * Formatea una fecha o milisegundos Unix en español de Chile usando America/Santiago para los
  * plazos mostrados.
+ *
+ * @param {string|number|Date} value - Valor compatible con el constructor Date.
+ * @returns {string} Fecha y hora en America/Santiago con formato es-CL.
  */
 const prettyDate=value=>new Date(value).toLocaleString('es-CL',{timeZone:'America/Santiago',dateStyle:'medium',timeStyle:'short'});
 /**
  * Devuelve el HTML de un indicador con valor y subtítulo. El renderizador que lo usa decide qué
  * métrica mostrar.
+ *
+ * @param {string} label - Etiqueta HTML de confianza.
+ * @param {string|number} value - Valor de presentación.
+ * @param {string} [sub=""] - Texto secundario HTML de confianza.
+ * @returns {string} HTML de una tarjeta de indicador.
  */
 const kpi=(label,value,sub='')=>`<div class="kpiCard"><span class="kpiLabel">${label}</span><b class="kpiValue">${value}</b><span class="kpiSub">${sub}</span></div>`;
 /**
@@ -119,17 +167,24 @@ function safeUrl(value){try{const u=new URL(value);return u.protocol==='https:'?
 /**
  * Anula la carga heredada desde localStorage. skillyInit obtiene la sesión vigente mediante
  * auth/me y cookies del servidor.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 loadSession=()=>{};
 /**
  * Actualiza los datos de presentación de la sesión, elimina el almacenamiento heredado y
  * redibuja la cabecera. La credencial permanece en una cookie HttpOnly gestionada por el
  * servidor.
+ *
+ * @param {Object|null} s - Sesión recibida del servidor o null al cerrar.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 saveSession=s=>{SESSION=s;localStorage.removeItem('skilly_session');renderSession();};
 /**
  * Invalida la sesión mediante la API, limpia el estado de panel y chat y vuelve al inicio de la
  * aplicación correspondiente. En administración vacía las colecciones privadas cargadas.
+ *
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 logout=async()=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -137,6 +192,8 @@ logout=async()=>perform(async()=>{
 /**
  * Actualiza cabecera, enlaces y menú según la sesión y oculta el catálogo al profesional. Solo
  * controla presentación; la API aplica los permisos y la propiedad de datos.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderSession=()=>{
   $('sessionBox').style.display=SESSION?'flex':'none';$('guestBox').style.display=SESSION?'none':'flex';
@@ -154,6 +211,9 @@ renderSession=()=>{
 /**
  * Restringe la navegación a la aplicación y rol actuales, activa la sección y ejecuta su
  * renderizador. También detiene el sondeo de chat al cambiar de página.
+ *
+ * @param {string} id - Identificador de sección solicitado.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 page=id=>{
   if(ADMIN_APP)id=['admin','bigDashboard'].includes(id)?id:'admin';
@@ -169,6 +229,8 @@ page=id=>{
  * Carga en paralelo servicios, perfiles, reservas y pagos autorizados; consulta evaluaciones
  * solo para administración. Actualiza los arreglos compartidos y vuelve a dibujar las secciones
  * activas.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 refreshAll=async()=>{
   const [services,profs,bookings,payments]=await Promise.all([Api.list('services'),Api.list('professionals'),Api.list('bookings'),Api.list('payments')]);
@@ -182,6 +244,9 @@ refreshAll=async()=>{
 /**
  * Selecciona el rol visual del formulario y fuerza admin en la aplicación administrativa. El
  * servidor obtiene el rol real desde la cuenta autenticada.
+ *
+ * @param {string} role - Rol visual solicitado; la aplicación administrativa fuerza admin.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 setLoginRole=role=>{
   loginRole=ADMIN_APP?'admin':role;
@@ -225,6 +290,8 @@ const oldProNext=regProNext;
 /**
  * Elimina el aviso previo del registro y los atributos aria-invalid/aria-describedby de sus
  * campos para iniciar una nueva validación.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function clearRegistrationError(){
   $('registrationError')?.remove();
@@ -236,11 +303,17 @@ const previousOpenRegister=openRegister;
 /**
  * Limpia errores accesibles y delega la apertura y reinicio del asistente en
  * previousOpenRegister de app.js.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 openRegister=()=>{clearRegistrationError();previousOpenRegister();};
 /**
  * Coloca el mensaje junto al campo problemático, activa su paso y dirige foco y desplazamiento
  * hacia él. Usa role=alert para que el error no dependa del aviso temporal.
+ *
+ * @param {string} message - Texto del error.
+ * @param {string} [field] - ID del campo que se marca y recibe el foco.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function registrationError(message,field){
   clearRegistrationError();
@@ -257,6 +330,8 @@ function registrationError(message,field){
 /**
  * Valida campos iniciales, correo, contraseña y precio antes de avanzar. Si todo cumple,
  * oldProNext reúne el borrador del primer servicio y abre antecedentes.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 regProNext=()=>{
   clearRegistrationError();
@@ -303,22 +378,30 @@ submitProValidation=async()=>{
 };
 /**
  * Abre el formulario para solicitar un enlace de recuperación por correo.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function openRecovery(){modal('Recuperar acceso',`<p class="hint">Enviaremos un enlace de recuperación al correo de tu cuenta.</p><label>Correo<input id="recoverEmail" type="email" autocomplete="email"></label>${action('Enviar enlace','sendRecovery()','primary')}`);}
 /**
  * Envía el correo a auth/forgot y muestra la respuesta genérica del servidor, que evita revelar
  * si la cuenta existe.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function sendRecovery(){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
   const r=await request('auth/forgot',{email:$('recoverEmail').value});toast(r.message);closeM('workspaceModal');});}
 /**
  * Abre el formulario de número de reserva y correo para recuperar un acceso invitado.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function openGuestRecovery(){modal('Consultar reserva de invitado',`<label>Número de reserva<input id="recoverBooking"></label><label>Correo<input id="recoverEmail" type="email"></label>${action('Enviar enlace seguro','recoverGuest()','primary')}`);}
 /**
  * Solicita un enlace de acceso limitado a la reserva y muestra el resultado genérico sin revelar
  * reservas ajenas.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function recoverGuest(){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -326,6 +409,9 @@ function recoverGuest(){perform(async()=>{
 /**
  * Envía el token de recuperación y la nueva contraseña. Tras confirmarse, cierra el formulario e
  * invita a iniciar sesión nuevamente.
+ *
+ * @param {string} token - Token de recuperación recibido en el enlace.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function resetPassword(token){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -334,6 +420,8 @@ function resetPassword(token){perform(async()=>{
  * Inicializa tema, menú y configuración, procesa tokens del fragmento y consulta auth/me. Carga
  * los datos permitidos, abre el panel adecuado y muestra el resultado de pasarelas; registra el
  * cierre de modales y limpia tokens visibles de la URL.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function skillyInit(){
   try{
@@ -360,29 +448,43 @@ async function skillyInit(){
 }
 /**
  * Alterna el tema claro/oscuro del documento y guarda la preferencia visual en localStorage.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function toggleTheme(){const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;localStorage.setItem('skilly_theme',theme);}
 /**
  * Traduce estados de reserva y algunos estados financieros a etiquetas de interfaz. Los pagos
  * actuales usan además SkillyView.paymentLabel para no confundir pago con avance del servicio.
+ *
+ * @param {string} s - Código de estado.
+ * @returns {string} Etiqueta conocida o código original.
  */
 bookingStatusLabel=s=>({gestion_skilly:'En revisión de Skilly',solicitado:'Pendiente de aceptación',aceptado:'Aceptada · pendiente de pago',reservado:'Reserva anterior · revisar con Skilly',pagado:'Pagada · servicio en curso',entregado:'Entregado · por confirmar',confirmado:'Entrega confirmada · por liquidar',completado:'Completado',cancelado:'Cancelado',rechazado:'Rechazado',expirado:'Plazo vencido',pendiente:'En revisión',validado:'Aprobado',info_solicitada:'Información solicitada',liberado:'Liquidación simulada',reembolsado:'Reembolso registrado',revision:'Requiere conciliación',reembolso_revision:'Reembolso en conciliación',iniciado:'Pago iniciado',procesando:'Procesando pago'}[s]||s);
 const oldRenderMarket=renderMarket;
 /**
  * Impide abrir el catálogo en administración o como profesional y reutiliza el renderizador de
  * tarjetas guardado en oldRenderMarket.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderMarket=()=>{if(SESSION?.role==='profesional'||ADMIN_APP)return;oldRenderMarket();};
 const oldOpenProfile=openProfile;
 /**
  * Aplica la misma restricción del catálogo y delega la ficha pública del servicio en
  * oldOpenProfile.
+ *
+ * @param {string} id - ID del servicio a mostrar.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 openProfile=id=>{if(SESSION?.role==='profesional'||ADMIN_APP)return;oldOpenProfile(id);};
 /**
  * Parte de la fecha de Chile y busca hasta count días ofrecidos dentro de los siguientes 60
  * días. Devuelve candidatos de calendario; los bloqueos y cupos se comprueban al pedir horarios
  * a la API.
+ *
+ * @param {Object} prof - Servicio o perfil con availability.days.
+ * @param {number} [count=12] - Máximo de candidatos dentro de los próximos 60 días.
+ * @returns {Array<{date: Date, label: string, key: string}>} Días candidatos; no confirma disponibilidad efectiva.
  */
 nextAvailableDays=(prof,count=12)=>{
   const out=[],today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -403,11 +505,17 @@ const oldBookingModal=renderBookingModal;
 /**
  * Reutiliza el modal base de app.js y cambia sus textos para identificar el servicio y solicitar
  * reserva antes de pagar.
+ *
+ * @param {Object} s - Servicio cargado que se utilizará para la solicitud.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderBookingModal=s=>{oldBookingModal(s);$('bookingBox').querySelector('h2').textContent=s.title;$('bookingBox').querySelector('p.hint').textContent=s.title+' · '+fmtMoney(s.price);$('confirmBookingBtn').textContent='Solicitar reserva';};
 /**
  * Actualiza el día, reinicia la hora y consulta disponibilidad real del servicio. Descarta una
  * respuesta atrasada si el usuario ya eligió otra fecha.
+ *
+ * @param {string} key - Fecha AAAA-MM-DD seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 pickBookingDay=async key=>{
   bookingCtx.date=key;bookingCtx.time=null;$('confirmBookingBtn').disabled=true;
@@ -417,6 +525,8 @@ pickBookingDay=async key=>{
 /**
  * Envía id del servicio, fecha, hora y notas para crear una solicitud. Refresca el panel e
  * informa que el pago se habilita después de la aceptación profesional.
+ *
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 confirmBooking=()=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -443,11 +553,17 @@ renderGuestForm=id=>{
 /**
  * Consulta los horarios disponibles para el día del formulario invitado y reconstruye el
  * selector. Muestra una opción vacía si no quedan cupos.
+ *
+ * @param {string} id - ID del servicio seleccionado.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function guestSlots(id){try{const date=$('gDate').value;if(!date)return;const r=await Api.list(`services/${id}/availability?date=${date}`);$('gTime').innerHTML=r.slots.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ h=>`<option>${h}</option>`).join('')||'<option value="">Sin disponibilidad</option>';}catch(e){toast(e.message);}}
 /**
  * Envía la solicitud invitada y presenta el número de reserva y estado del envío de su enlace.
  * La identidad y acciones posteriores dependen del acceso seguro de esa reserva.
+ *
+ * @param {string} id - ID del servicio seleccionado.
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 submitGuestRequest=id=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -475,19 +591,32 @@ const oldCreate=Api.create;
 /**
  * Añade acceptTerms desde la casilla del checkout solo a las tres rutas de inicio de pago y
  * delega en oldCreate. El servidor exige este consentimiento antes de crear el intento.
+ *
+ * @param {string} path - Ruta relativa a /api/.
+ * @param {Object} data - Cuerpo JSON; en pagos se incorpora acceptTerms del formulario.
+ * @returns {Promise<*>} JSON de la respuesta.
+ * @throws {Error} Propaga los errores HTTP, de red y de lectura JSON de request.
  */
 Api.create=(path,data)=>{if(['payments','payments/webpay/create','payments/paypal/create-order'].includes(path))data={...data,acceptTerms:!!$('acceptTerms')?.checked};return oldCreate(path,data);};
 /**
  * Genera la navegación del panel y marca la pestaña activa usando panelTab.
+ *
+ * @param {Array<string[]>} items - Pares de ID de pestaña y etiqueta HTML de confianza.
+ * @returns {string} HTML de la navegación del panel.
  */
 function panelTabs(items){return `<div class="workspaceTabs" role="navigation" aria-label="Secciones de mi panel">${items.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ ([id,label])=>`<button class="${panelTab===id?'on':''}" onclick="switchPanel('${id}')">${label}</button>`).join('')}</div>`;}
 /**
  * Actualiza la pestaña elegida y redibuja el panel del usuario actual.
+ *
+ * @param {string} tab - Pestaña seleccionada del panel.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function switchPanel(tab){panelTab=tab;renderDashboard();}
 /**
  * Muestra aviso de acceso si no hay sesión o delega al panel profesional o del cliente según el
  * rol.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderDashboard=()=>{
   const el=$('dashContent');if(!el)return;
@@ -497,6 +626,9 @@ renderDashboard=()=>{
 /**
  * Calcula indicadores mediante SkillyView.metrics y presenta el resumen del profesional o de la
  * organización. Distingue neto pendiente de liquidar de gasto del cliente menos devoluciones.
+ *
+ * @param {boolean} [pro=false] - Selecciona el resumen financiero del profesional.
+ * @returns {string} HTML de indicadores calculados con los datos cargados.
  */
 function summary(pro=false){
   const totals=SkillyView.metrics(BOOKINGS);
@@ -505,12 +637,18 @@ function summary(pro=false){
 /**
  * Convierte las líneas financieras de SkillyView en HTML escapado. Usa retención/devolución para
  * cancelaciones y evita presentar el neto original como automáticamente pagadero.
+ *
+ * @param {Object} b - Vista de reserva con importes y estados financieros.
+ * @returns {string} HTML escapado de las líneas financieras.
  */
 function financialBreakdown(b){return `<div class="moneyBreakdown">${SkillyView.financialLines(b).map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ ([label,value])=>`<span>${esc(label)}${value===null?'':': '+fmtMoney(value)}</span>`).join('')}</div>`;}
 /**
  * Genera tarjetas de reserva con datos, plazos, identidad disponible y acciones por rol y
  * estado. Las guardas visuales orientan al usuario; cada acción se vuelve a validar en el
  * servidor.
+ *
+ * @param {Object[]} rows - Reservas autorizadas cargadas para la sesión.
+ * @returns {string} HTML de las tarjetas o del mensaje de lista vacía.
  */
 function bookingCards(rows){return rows.length?rows.map(b=>{
   // Transforma cada registro en la estructura requerida por bookingCards, conservando su posición en el arreglo resultante.
@@ -550,6 +688,9 @@ function bookingAction(id,status){perform(async()=>{
  * Construye el espacio exclusivo del profesional con dashboard, servicios, calendario,
  * disponibilidad, reservas, historial y antecedentes. Renderiza la sección elegida sobre los
  * datos autorizados por la API.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderProDashboard=el=>{
   const p=PROFESSIONALS.find(/* Busca el primer elemento según la condición x.id===SESSION.professionalId. Se evalúan los datos ya cargados. */ x=>x.id===SESSION.professionalId);if(!p){el.innerHTML=empty('No se encontró el perfil.');return;}
@@ -566,6 +707,9 @@ renderProDashboard=el=>{
 /**
  * Construye las pestañas de organización o del invitado limitado a su reserva. Separa historial,
  * pagos, comprobantes y chat sin ofrecer contratación a profesionales.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderOrgDashboard=el=>{
   const guest=SESSION.role==='invitado';
@@ -584,15 +728,21 @@ renderOrgDashboard=el=>{
  * Presenta pagos con el estado financiero separado del estado de reserva, comprobantes y
  * devoluciones. En administración agrega conciliación y devolución de cobros tardíos cuando
  * corresponde.
+ *
+ * @param {Object[]} payments - Pagos autorizados para la sesión.
+ * @returns {string} HTML de los pagos o del mensaje de lista vacía.
  */
 function paymentCards(payments){return payments.length?payments.map(p=>{
-  // Transforma los estados o valores del resultado para compararlos con lo esperado por la prueba.
+  // Relaciona cada pago con su reserva para presentar importes, comprobantes y acciones permitidas.
   
   const b=BOOKINGS.find(/* Busca el primer elemento según la condición b.id===p.bookingId. Se evalúan los datos ya cargados. */ b=>b.id===p.bookingId);return `<div class="dashCard"><div class="cardhead"><div><h3>${esc(b?.service||'Pago')}</h3><p class="hint">${esc(p.method)} · ${prettyDate(p.createdAt)}</p></div><span class="statusBadge">${esc(SkillyView.paymentLabel(p.status))}</span></div>${b?`<p>Reserva: ${esc(bookingStatusLabel(b.status))}</p>`:''}${p.refundAmount!=null?`<p>Devolución: ${fmtMoney(p.refundAmount)}</p>`:''}<div class="row"><span>Total del servicio</span><b>${fmtMoney(p.amount)}</b></div>${SESSION.role==='admin'&&b?financialBreakdown(b):''}<div class="actionRow">${p.invoiceNumber?action('Descargar comprobante',`downloadReceiptFor('${p.id}','${p.bookingId}')`):''}${b?.paidAt?action('Boletas y facturas adjuntas',`openDocuments('${b.id}')`):''}${SESSION.role==='admin'&&['iniciado','procesando','revision'].includes(p.status)?action('Consultar estado al proveedor',`reconcilePayment('${p.id}')`):''}${SESSION.role==='admin'&&p.status==='revision'&&p.invoiceNumber&&!b?.paidAt?action('Reembolsar cobro fuera de plazo',`refundLate('${p.id}')`,'danger'):''}</div></div>`;
 }).join(''):empty('Aún no hay pagos.');}
 /**
  * Pide al servidor consultar la pasarela para un pago incierto, recarga los datos e informa si
  * el cobro requiere devolución por llegar tarde.
+ *
+ * @param {string} id - ID del pago seleccionado.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function reconcilePayment(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -600,6 +750,9 @@ function reconcilePayment(id){perform(async()=>{
 /**
  * Muestra borradores, observaciones, versión publicada y neto estimado de los servicios propios.
  * policies.js conserva esta base y añade acceso a mediación.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function renderMyServices(el){el.innerHTML=`<div class="sectionTitle"><div><h3>Mis servicios</h3><p class="hint">Los cambios se revisan antes de publicarse. La versión aprobada sigue disponible.</p></div>${action('＋ Nuevo servicio',"editService()",'primary')}</div><div class="serviceGrid">${SERVICES.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ s=>`<article class="dashCard"><div class="cardhead"><h3>${esc(s.title)}</h3>${badge(s.status)}</div><p>${esc(s.description)}</p><div class="row"><span>Precio</span><b>${fmtMoney(s.price)}</b></div><div class="row"><span>Atención + preparación + seguimiento</span><b>${s.durationMinutes+s.prepMinutes+s.followupMinutes} min</b></div><p class="hint">Comisión aplicada: ${s.effectiveCommission} %. Neto estimado: ${fmtMoney(s.price-Math.round(s.price*s.effectiveCommission/100))}.</p>${s.adminNotes?`<p class="reviewNote">Skilly: ${esc(s.adminNotes)}</p>`:''}${s.published?`<p class="hint">Versión publicada: ${esc(s.published.title)} · ${fmtMoney(s.published.price)}</p>`:'<p class="hint">Aún no publicado.</p>'}${action('Editar servicio',`editService('${s.id}')`)}</article>`).join('')||empty('Crea tu primer servicio.')}</div>`;}
 /**
@@ -640,9 +793,17 @@ function renderAvailability(el,p){el.innerHTML=`<div class="dashCard"><h3>Mi jor
 /**
  * Convierte los campos de agenda a arreglos y números, usa null para límites vacíos y guarda el
  * perfil propio. No cancela reservas existentes al bloquear fechas.
+ *
+ * @param {string} id - ID del perfil profesional.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function saveAvailability(id){perform(async()=>{/* Lee un límite del formulario: devuelve null para un campo vacío o su conversión numérica para enviarlo a la API. */ 
-  // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
+  /**
+   * Lee un límite opcional desde el formulario de disponibilidad. La ausencia de valor se envía como null para quitar el límite.
+   *
+   * @param {string} id - ID de un campo numérico de capacidad.
+   * @returns {number|null} null para un campo vacío; Number del contenido en otro caso, incluso NaN.
+   */
   const num=id=>$(id).value===''?null:Number($(id).value);await request(`professionals/${id}/self`,{availability:{days:[...document.querySelectorAll('.availabilityDay:checked')].map(/* Extrae c.value de cada elemento para formar la lista que necesita esta operación. */ c=>c.value),hours:$('workHours').value.split(',').map(/* Elimina espacios exteriores de cada valor antes de descartar entradas vacías o enviar los datos. */ s=>s.trim()).filter(Boolean)},workStart:$('workStart').value,workEnd:$('workEnd').value,blockedDates:$('blockedDates').value.split(/[\n,]/).map(/* Elimina espacios exteriores de cada valor antes de descartar entradas vacías o enviar los datos. */ s=>s.trim()).filter(Boolean),maxPerDay:num('limitDay'),maxPerWeek:num('limitWeek'),maxPerMonth:num('limitMonth')},'PATCH');await refreshAll();toast('Agenda actualizada.');});}
 /**
  * Dibuja los datos de cuenta y contacto, correo de solo lectura y estado de verificación. Ofrece
@@ -670,11 +831,18 @@ function saveProfile(){perform(async()=>{
 /**
  * Reutiliza el formulario de cuenta y agrega antecedentes, observaciones y controles para
  * reenviar validación profesional.
+ *
+ * @param {HTMLElement} el - Contenedor del formulario.
+ * @param {Object} p - Perfil profesional con validation, status y observaciones.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function renderProfessionalProfile(el,p){renderProfile(el);el.insertAdjacentHTML('beforeend',`<div class="dashCard"><h3>Antecedentes profesionales</h3>${badge(p.status)}<p class="reviewNote">${esc(p.adminNotes||'Skilly revisará tu información y los servicios por separado.')}</p><label>LinkedIn<input id="rvLinkedin" value="${esc(p.validation.linkedin||'')}"></label><div class="formgrid2"><label>Años de experiencia<input id="rvYears" value="${esc(p.validation.yearsExperience||'')}"></label><label>Certificaciones<input id="rvCerts" value="${esc(p.validation.certifications||'')}"></label></div><label>CV / antecedentes<textarea id="rvCv">${esc(p.validation.cv||'')}</textarea></label><label>Referencias<textarea id="rvRefs">${esc(p.validation.references||'')}</textarea></label><label>Portafolio<input id="rvPortfolio" value="${esc(p.validation.portfolio||'')}"></label><label>Motivación<textarea id="rvMotivation">${esc(p.validation.motivation||'')}</textarea></label>${action('Enviar antecedentes a revisión',`resubmitValidation('${p.id}')`,'outline')}</div>`);}
 /**
  * Recoge antecedentes del profesional y los envía a su perfil. El servidor los valida y vuelve a
  * poner el perfil en revisión.
+ *
+ * @param {string} id - ID del perfil profesional.
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 resubmitValidation=id=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -683,19 +851,32 @@ let calMode='month',calDate=new Date(),calStatus='',calProfessional='',calServic
 /**
  * Devuelve AAAA-MM-DD usando los componentes locales de un Date. El llamador debe construir la
  * fecha apropiada; no convierte por sí sola a America/Santiago.
+ *
+ * @param {Date} d - Fecha cuyos componentes locales se formatean.
+ * @returns {string} Fecha local en formato AAAA-MM-DD.
+ * @example
+ * dateKey(new Date(2026, 0, 15)); // "2026-01-15"
  */
 function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 /**
  * Avanza o retrocede el mes, la semana o el día según calMode y vuelve a dibujar el calendario.
+ *
+ * @param {number} n - Desplazamiento en meses, semanas o días según calMode.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function calendarMove(n){if(calMode==='month')calDate=new Date(calDate.getFullYear(),calDate.getMonth()+n,1);else calDate.setDate(calDate.getDate()+n*(calMode==='week'?7:1));redrawCalendar();}
 /**
  * Selecciona el contenedor administrativo o profesional y llama a renderCalendar con el estado
  * actual.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function redrawCalendar(){renderCalendar(calAdmin?$('adminContent'):$('panelBody'),calAdmin);}
 /**
  * Guarda la vista month, week o day seleccionada y redibuja la agenda.
+ *
+ * @param {string} mode - Vista month, week o day.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function calendarMode(mode){calMode=mode;redrawCalendar();}
 /**
@@ -718,6 +899,9 @@ function renderCalendar(el,admin){
   /**
    * Genera el botón de una reserva para el calendario con hora, servicio, participante y clase de
    * estado. Al pulsarlo abre showBooking.
+   *
+   * @param {Object} b - Reserva con id, estado, hora, servicio y participantes visibles.
+   * @returns {string} HTML del botón de reserva.
    */
   const event=b=>`<button class="calEvent status-${b.status}" onclick="showBooking('${b.id}')"><b>${esc(b.time)} · ${esc(b.service)}</b><span>${admin?esc(b.professionalName):esc(b.orgName)}</span><small>${bookingStatusLabel(b.status)}</small></button>`;
   if(calMode==='month'){
@@ -747,11 +931,17 @@ function showBooking(id){const b=BOOKINGS.find(/* Busca el primer elemento segú
 /**
  * Abre el formulario administrativo para cambiar fecha y hora de una reserva existente. El
  * guardado validará disponibilidad en el servidor.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function rescheduleBooking(id){const b=BOOKINGS.find(/* Busca el primer elemento según la condición b.id===id. Se evalúan los datos ya cargados. */ b=>b.id===id);modal('Reprogramar reserva',`<p>${esc(b.service)} · ${esc(b.orgName)}</p><div class="formgrid2"><label>Fecha<input id="newDate" type="date" value="${b.date}"></label><label>Hora<input id="newTime" type="time" value="${b.time}"></label></div><p class="hint">Se verificará la disponibilidad real y se notificará al cliente.</p>${action('Guardar cambio',`saveReschedule('${id}')`,'primary')}`);}
 /**
  * Envía la nueva fecha y hora, cierra el formulario y refresca las reservas. El flujo actual no
  * solicita doble aceptación de la nueva fecha.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function saveReschedule(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -759,6 +949,9 @@ function saveReschedule(id){perform(async()=>{
 /**
  * Solicita la liberación simulada de una reserva confirmada y muestra el resultado. El servidor
  * la permite solo para pagos simulados fuera de producción y sin casos pendientes.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function releaseBooking(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -766,11 +959,17 @@ function releaseBooking(id){perform(async()=>{
 /**
  * Adapta la entrada del calendario administrativo heredado al renderizador compartido con
  * filtros de administración.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderAdminCalendar=el=>renderCalendar(el,true);
 const adminItems=[['inicio','⌂','Inicio'],['dashboard','▦','Dashboard'],['calendario','▣','Calendario'],['reservas','◷','Reservas'],['validaciones','✓','Validaciones'],['servicios','◇','Servicios y comisiones'],['profesionales','♙','Profesionales'],['organizaciones','▤','Organizaciones'],['guest','✉','Solicitudes sin registro'],['evaluaciones','☆','Evaluaciones privadas'],['incidencias','!','Incidencias'],['pagos','$','Pagos y liquidaciones'],['ajustes','⚙','Configuración'],['usuarios','♧','Administradores'],['auditoria','≡','Actividad']];
 /**
  * Redirige la selección de pestañas heredada a adminNavigate del menú lateral.
+ *
+ * @param {string} section - Sección del menú administrativo.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 setAdminTab=section=>adminNavigate(section);
 const previousAdminRender=renderAdmin;
@@ -778,6 +977,8 @@ const previousAdminRender=renderAdmin;
  * Distribuye inicio, reservas, servicios, casos, usuarios, actividad y pagos en el panel
  * administrativo. Delega las demás secciones en previousAdminRender y muestra ingreso si falta
  * sesión.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 renderAdmin=()=>{
   const el=$('adminContent');if(!el)return;
@@ -795,6 +996,9 @@ renderAdmin=()=>{
 /**
  * Presenta borrador y publicación para revisar servicios y configurar su comisión. policies.js
  * amplía esta vista con el acceso al registro de mediación.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function renderAdminServices(el){el.innerHTML=`<p class="hint">Revisa el contenido y verifica que no incluya identidad ni datos de contacto. Las modificaciones no cambian las reservas existentes.</p>`+SERVICES.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ s=>`<div class="dashCard"><div class="cardhead"><div><h3>${esc(s.title)}</h3><p class="hint">${esc(s.professionalName)} · profesional ${esc(s.professionalStatus)}</p></div>${badge(s.status)}</div><p>${esc(s.description)}</p><div class="row"><span>Precio propuesto</span><b>${fmtMoney(s.price)}</b></div><div class="row"><span>Atención / preparación / seguimiento</span><b>${s.durationMinutes} / ${s.prepMinutes} / ${s.followupMinutes} min</b></div>${s.published?`<details><summary>Ver versión publicada</summary><p>${esc(s.published.title)} · ${fmtMoney(s.published.price)}</p><p>${esc(s.published.description)}</p></details>`:'<p class="hint">Sin versión publicada.</p>'}<label>Observaciones<textarea id="serviceNotes-${s.id}">${esc(s.adminNotes||'')}</textarea></label><div class="actionRow">${action('Aprobar',`reviewService('${s.id}','validado')`,'primary')}${action('Solicitar información',`reviewService('${s.id}','info_solicitada')`)}${action('Rechazar',`reviewService('${s.id}','rechazado')`,'danger')}</div><div class="commissionSetting"><label>Comisión de este servicio (%)<input type="number" min="0" max="100" step="0.1" id="commission-${s.id}" value="${s.commissionPercent??''}" placeholder="General: ${s.effectiveCommission}%"></label>${action('Guardar comisión',`saveServiceCommission('${s.id}')`)}<p class="hint">Deja el campo vacío para usar la comisión general. Se descuenta del precio del profesional.</p></div></div>`).join('');}
 /**
@@ -814,6 +1018,9 @@ function reviewService(id,status){perform(async()=>{
 /**
  * Guarda la comisión particular o null para heredar la general y recarga los servicios. Solo las
  * nuevas reservas toman este valor.
+ *
+ * @param {string} id - ID del servicio seleccionado.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function saveServiceCommission(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -821,6 +1028,9 @@ function saveServiceCommission(id){perform(async()=>{
 /**
  * Consulta y dibuja comisión general, plazos, capacidad y devolución tardía configurable.
  * Incluye acceso a perfil y correos de prueba.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 renderAdminSettings=async el=>{
   try{const s=await Api.adminGet('settings');el.innerHTML=`<div class="dashCard"><h3>Comisión general de Skilly</h3><p class="hint">Se descuenta del precio del profesional. Cada servicio puede tener una comisión diferente en “Servicios y comisiones”. Las reservas existentes conservan su porcentaje.</p><label>Comisión general (%)<input id="setCommission" type="number" min="0" max="100" step="0.1" value="${s.commission_percent}"></label></div><div class="dashCard"><h3>Plazos de reservas</h3><div class="formgrid2"><label>Horas para aceptar una solicitud<input id="setResponse" type="number" min="1" value="${s.response_hours}"></label><label>Horas para pagar tras la aceptación<input id="setPayment" type="number" min="1" value="${s.payment_hours}"></label></div><p class="hint">Siempre vencen antes del inicio de la dedicación reservada.</p></div><div class="dashCard"><h3>Capacidad de revisión semanal</h3><label>Revisiones por semana<input id="setWeeklyCap" type="number" min="1" value="${s.admin_weekly_review_capacity}"></label></div><div class="dashCard"><h3>Política de cancelación</h3><label>Porcentaje a reembolsar<input id="setRefundPct" type="number" min="0" max="100" value="${s.default_cancellation_refund_percent}"></label><p class="hint">Valor heredado de la versión anterior. Se informa antes del pago y se guarda en cada solicitud.</p></div>${action('Guardar configuración','saveSettings()','primary')}${action('Perfil de mi cuenta','adminProfile()')}${action('Correos de prueba','showOutbox()')}`;}catch(e){toast(e.message);}
@@ -828,6 +1038,8 @@ renderAdminSettings=async el=>{
 /**
  * Envía los valores del formulario administrativo y recarga configuración pública. Los cambios
  * no reemplazan las condiciones ya guardadas en reservas anteriores.
+ *
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 saveSettings=()=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -835,32 +1047,48 @@ saveSettings=()=>perform(async()=>{
 /**
  * Abre el modal de cuenta administrativa y reutiliza renderProfile para editar datos de
  * contacto.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function adminProfile(){modal('Mi cuenta','<div id="adminProfileForm"></div>');renderProfile($('adminProfileForm'));}
 /**
  * Consulta cuentas visibles para administración y muestra invitación de administradores y
  * activación de perfiles profesionales anteriores.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderUsers(el){try{const users=await Api.adminGet('users');el.innerHTML=`<div class="sectionTitle"><h3>Administradores y accesos</h3>${action('Invitar administrador',"inviteUser('admin')",'primary')}${action('Habilitar perfil anterior',"inviteUser('profesional')")}</div><p class="hint">Todos los administradores tienen los mismos permisos. Las contraseñas se crean desde un enlace enviado por correo.</p>`+users.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ u=>`<div class="dashCard"><b>${esc(u.name)}</b><p class="hint">${esc(u.email)} · ${esc(u.role)}</p></div>`).join('');}catch(e){toast(e.message);}}
 /**
  * Abre el formulario de nombre y correo para una invitación administrativa o para habilitar un
  * perfil profesional heredado.
+ *
+ * @param {string} role - Rol usado para seleccionar el formulario de invitación.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function inviteUser(role){modal(role==='admin'?'Invitar administrador':'Habilitar cuenta de un profesional existente',`<label>Nombre<input id="inviteName"></label><label>Correo<input id="inviteEmail" type="email"></label>${action('Enviar invitación',`sendInvite('${role}')`,'primary')}`);}
 /**
  * Solicita la creación e invitación de una cuenta, recarga el listado y explica si el correo se
  * envió o quedó en bandeja de pruebas.
+ *
+ * @param {string} role - Rol de la cuenta que se solicita invitar.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function sendInvite(role){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
   const r=await request('admin/users',{name:$('inviteName').value,email:$('inviteEmail').value,role});closeM('workspaceModal');renderUsers($('adminContent'));toast(r.emailSent?'Invitación enviada.':'Cuenta creada. Revisa Correos de prueba si Gmail no está configurado.');});}
 /**
  * Consulta las últimas entradas de auditoría y las presenta con autor, acción, objetivo y fecha.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderAudit(el){try{const rows=await Api.adminGet('audit');el.innerHTML='<h3>Actividad administrativa y accesos</h3>'+rows.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ r=>`<div class="dashCard"><b>${esc(r.action)}</b><p class="hint">${prettyDate(r.created_at)} · ${esc(r.actor)}</p><p>${esc(r.target)} ${esc(r.detail||'')}</p></div>`).join('');}catch(e){toast(e.message);}}
 /**
  * Muestra cuerpos de correos de prueba para recuperar enlaces en desarrollo. La API devuelve 404
  * en producción y no expone esta bandeja pública.
+ *
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function showOutbox(){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -869,11 +1097,17 @@ const oldGuestAdmin=renderAdminGuestRequests;
 /**
  * Amplía el listado heredado con el botón para enviar al profesional las solicitudes cuya
  * reserva sigue en gestion_skilly.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 renderAdminGuestRequests=async el=>{await oldGuestAdmin(el);for(const g of GUEST_REQUESTS){const card=$('gnotes-'+g.id)?.closest('.dashCard');const b=BOOKINGS.find(/* Busca el primer elemento según la condición b.id===g.bookingId. Se evalúan los datos ya cargados. */ b=>b.id===g.bookingId);if(card&&b?.status==='gestion_skilly')card.insertAdjacentHTML('beforeend',action('Enviar al profesional',`convertGuestRequest('${g.id}')`,'primary'));}};
 /**
  * Solicita a Skilly tramitar la reserva invitada hacia el profesional y actualiza el panel. No
  * acepta ni paga en nombre del profesional.
+ *
+ * @param {string} id - ID de la solicitud invitada.
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 convertGuestRequest=id=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -881,25 +1115,41 @@ convertGuestRequest=id=>perform(async()=>{
 /**
  * Lista adjuntos de la reserva y abre su formulario de subida. Los documentos tributarios se
  * adjuntan desde fuera; la plataforma no los emite.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function openDocuments(id){try{const rows=await Api.list('bookings/'+id+'/attachments');modal('Comprobantes, boletas y facturas',`<p class="hint">Puedes adjuntar documentos emitidos por fuera de Skilly. El comprobante de pago de la plataforma no reemplaza una boleta o factura tributaria.</p>${rows.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ d=>`<div class="miniRow"><b>${esc(d.name)}</b><a class="btn outline" href="/api/attachments/${d.id}" download>Descargar</a></div>`).join('')||empty('No hay documentos adjuntos.')}<label>Adjuntar PDF, PNG o JPG (hasta 5 MB)<input id="attachmentFile" type="file" accept="application/pdf,image/png,image/jpeg"></label>${action('Subir documento',`uploadDocument('${id}')`,'primary')}`);}catch(e){toast(e.message);}}
 /**
  * Comprueba archivo y tamaño, lee Base64 con FileReader y lo envía a la API de adjuntos. El
  * servidor vuelve a validar formato, firma, límite y acceso a la reserva.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function uploadDocument(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
   const file=$('attachmentFile').files[0];if(!file)throw new Error('Selecciona un archivo.');if(file.size>5*1024*1024)throw new Error('Máximo 5 MB.');const data=await new Promise((resolve,reject)=>{
   // Adapta FileReader a una promesa: resuelve al terminar la lectura del archivo o rechaza si ocurre un error.
-  const reader=new FileReader();/* Extrae del Data URL la parte Base64 y resuelve la lectura asíncrona para enviar el archivo. */ reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});await request('bookings/'+id+'/attachments',{name:file.name,mime:file.type,data});await openDocuments(id);toast('Documento adjuntado.');});}
+  const reader=new FileReader();/**
+   * Extrae del Data URL la parte Base64 y resuelve la lectura asíncrona para enviar el archivo.
+   *
+   * @returns {void} Resuelve la promesa de lectura con el contenido Base64.
+   */ reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});await request('bookings/'+id+'/attachments',{name:file.name,mime:file.type,data});await openDocuments(id);toast('Documento adjuntado.');});}
 /**
  * Muestra el formulario básico anterior de incidencias. policies.js reemplaza esta función por
  * el historial completo con categorías, evidencia, respuestas y apelación.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function openIncident(id){try{const rows=await Api.list('bookings/'+id+'/incidents');modal('Incidencias de la reserva',rows.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ i=>`<div class="dashCard"><b>${esc(i.status)}</b><p>${esc(i.body)}</p>${i.resolution?`<p>Resolución: ${esc(i.resolution)}</p>`:''}</div>`).join('')+`<label>Describe lo ocurrido<textarea id="incidentBody"></textarea></label>${action('Enviar a Skilly',`submitIncident('${id}')`,'primary')}`);}catch(e){toast(e.message);}}
 /**
  * Envía el texto del formulario básico anterior. policies.js la sustituye para incluir
  * categoría, evidencia y solución solicitada.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function submitIncident(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -907,11 +1157,17 @@ function submitIncident(id){perform(async()=>{
 /**
  * Dibuja la lista básica anterior de incidencias y una resolución textual. policies.js reemplaza
  * esta vista por decisiones pendientes y cierre con acciones cumplidas.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderIncidents(el){try{const rows=await Api.adminGet('incidents');el.innerHTML=rows.length?rows.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ i=>`<div class="dashCard"><h3>${esc(i.service)}</h3><p class="hint">${esc(i.org_name)} · ${esc(i.status)}</p><p>${esc(i.body)}</p>${i.status==='abierta'?`<label>Resolución<textarea id="resolution-${i.id}"></textarea></label>${action('Guardar resolución',`resolveIncident('${i.id}')`,'primary')}`:`<p>${esc(i.resolution||'')}</p>`}${action('Ver reserva',`showBooking('${i.booking_id}')`)}</div>`).join(''):empty('No hay incidencias.');}catch(e){toast(e.message);}}
 /**
  * Envía una resolución desde el formulario básico heredado. El panel vigente utiliza decideCase
  * de policies.js para distinguir decisión de ejecución y cierre.
+ *
+ * @param {string} id - ID de la incidencia.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function resolveIncident(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -919,17 +1175,24 @@ function resolveIncident(id){perform(async()=>{
 /**
  * Construye el modal de coordinación sin recrear el campo en cada consulta e inicia sondeo de
  * mensajes cada cuatro segundos.
+ *
+ * @param {string} id - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 openChat=id=>{chatBookingId=id;$('chatBox').innerHTML=`<button class="close" onclick="closeChat()">×</button><small>CHAT DE LA RESERVA</small><h2>Coordina tu servicio</h2><div class="chatMessages" id="chatMessages" aria-live="polite"></div><label>Mensaje<input id="chatInput" maxlength="4000" onkeydown="if(event.key==='Enter')sendChatMessage()"></label>${action('Enviar','sendChatMessage()','primary')}`;openM('chat');renderChat();clearInterval(chatPollTimer);chatPollTimer=setInterval(renderChat,4000);};
 /**
  * Consulta mensajes solo mientras el modal está abierto y actualiza la conversación escapando
  * contenido. Mantiene el desplazamiento si el usuario está leyendo y detiene el sondeo ante
  * error.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 renderChat=async()=>{if(!chatBookingId||!$('chat').classList.contains('show'))return;try{const rows=await Api.list('bookings/'+chatBookingId+'/messages');const el=$('chatMessages');if(!el)return;const nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;el.innerHTML=rows.map(/* Construye el fragmento de presentación de cada elemento; el resultado se une después para formar la vista. */ m=>`<div class="chatMsg ${m.senderRole===(SESSION.role==='invitado'?'organizacion':SESSION.role)?'chatMsg-mine':''}"><span class="chatMsgMeta">${esc(m.senderName)} · ${prettyDate(m.createdAt)}</span><div class="chatMsgBody">${esc(m.body)}</div></div>`).join('')||'<p class="hint">Aún no hay mensajes.</p>';if(nearBottom)el.scrollTop=el.scrollHeight;}catch(e){clearInterval(chatPollTimer);toast(e.message);}};
 /**
  * Envía únicamente el cuerpo no vacío del mensaje, limpia el campo al confirmarse y refresca la
  * conversación. El servidor asigna identidad del remitente.
+ *
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 sendChatMessage=()=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -937,12 +1200,20 @@ sendChatMessage=()=>perform(async()=>{
 /**
  * Construye la vista intermedia de cancelación usando el porcentaje guardado. policies.js la
  * reemplaza por una cotización actual del servidor y opción de porcentaje administrativo.
+ *
+ * @param {string} id - ID de la reserva.
+ * @param {boolean} [fromAdmin=false] - Indica si la cancelación se abre desde administración.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 openCancelModal=(id,fromAdmin=false)=>{const b=BOOKINGS.find(/* Busca el primer elemento según la condición x.id===id. Se evalúan los datos ya cargados. */ x=>x.id===id),p=PAYMENTS.find(/* Busca el primer elemento según la condición p.bookingId===id&&p.status==='pagado'. Se evalúan los datos ya cargados. */ p=>p.bookingId===id&&p.status==='pagado');if(!b)return;
   $('cancelBookingBox').innerHTML=`<button class="close" onclick="closeM('cancelBooking')">×</button><h2>Cancelar reserva</h2><p>${esc(b.service)} · ${esc(b.date)} ${esc(b.time)}</p>${p?`<p>Reembolso según las condiciones aceptadas: ${b.refundPolicyPercent}% (${fmtMoney(Math.round(p.amount*b.refundPolicyPercent/100))}).</p>`:'<p>No se ha confirmado un pago.</p>'}<label>Motivo<textarea id="cancelReason"></textarea></label>${action('Confirmar cancelación',`confirmCancelBooking('${id}',${fromAdmin})`,'danger full')}`;openM('cancelBooking');};
 /**
  * Envía motivo de cancelación desde la vista intermedia. policies.js reemplaza esta función para
  * incluir el porcentaje administrativo cuando se indica.
+ *
+ * @param {string} id - ID de la reserva.
+ * @param {boolean} admin - Contexto administrativo heredado; no cambia el cuerpo enviado en esta versión.
+ * @returns {Promise<void>} Finaliza la acción; perform muestra los errores mediante toast.
  */
 confirmCancelBooking=(id,admin)=>perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.
@@ -952,6 +1223,10 @@ const previousDownloadReceipt=downloadReceipt;
  * Descarga un comprobante TXT con datos de pago, reserva y desglose permitido al rol. No emite
  * factura tributaria; conserva un rótulo heredado de liquidación simulada para pagos liberados,
  * aunque el registro externo existe.
+ *
+ * @param {Object} p - Pago con datos de comprobante y proveedor.
+ * @param {Object} b - Reserva con desglose financiero y participantes visibles.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 downloadReceipt=(p,b)=>{
   const content=`SKILLY — COMPROBANTE DE PAGO\nNo constituye boleta ni factura tributaria.\n\nNúmero: ${p.invoiceNumber||p.id}\nReserva: ${b.id}\nServicio: ${b.service}\nOrganización: ${b.orgName}\nProfesional: ${b.professionalName||'Identidad disponible después del pago'}\nFecha del servicio: ${b.date} ${b.time} (America/Santiago)\nTotal: ${fmtMoney(p.amount)} CLP\nMedio de pago: ${p.method}\nReferencia del proveedor: ${p.authorizationCode||'—'}\nEstado del pago: ${SkillyView.paymentLabel(p.status)}\nEstado de la reserva: ${bookingStatusLabel(b.status)}\n${p.provider==='simulado'?'PAGO SIMULADO — SIN COBRO REAL\n':''}${p.status==='liberado'?'Liquidación simulada; no constituye una transferencia bancaria.\n':''}${p.refundAmount!=null?'Reembolso: '+fmtMoney(p.refundAmount)+'\n':''}${['admin','profesional'].includes(SESSION.role)?`${SkillyView.financialLines(b).map(/* Transforma cada elemento con label+(value===null?'':': '+fmtMoney(value)) para construir la colección utilizada por esta operación. */ ([label,value])=>label+(value===null?'':': '+fmtMoney(value))).join('\n')}\n`:''}`;
@@ -961,6 +1236,9 @@ downloadReceipt=(p,b)=>{
 /**
  * Solicita la devolución de un cobro confirmado fuera del plazo y actualiza el panel. La API
  * bloquea reintentos automáticos si el proveedor devuelve un resultado incierto.
+ *
+ * @param {string} id - ID del pago seleccionado.
+ * @returns {void} Actualiza la interfaz o inicia la acción sin devolver datos.
  */
 function refundLate(id){perform(async()=>{
   // Ejecuta la acción del formulario y sus actualizaciones de pantalla; perform captura los errores para mostrarlos con toast.

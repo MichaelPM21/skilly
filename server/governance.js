@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Reclamos y mediaciones: apertura → respuesta → decisión pendiente →
+ * @file Reclamos y mediaciones: apertura → respuesta → decisión pendiente →
  * ejecución/conformidad → resolución, con una apelación. El trabajador público revisa atrasos y
  * correos cada minuto. Nunca libera dinero por silencio ni prueba ausencia automáticamente.
  */
@@ -417,6 +417,8 @@ let worker;
  * Inicia una sola tarea periódica por proceso y realiza una primera ejecución inmediata. Cada
  * minuto ejecuta sweep y flush sin solaparse; unref evita que el temporizador mantenga vivo por
  * sí solo el proceso.
+ *
+ * @returns {Promise<void>} Finaliza tras el primer ciclo o si el temporizador ya existe.
  */
 async function startWorker() {
   if (worker) return;
@@ -425,6 +427,8 @@ async function startWorker() {
    * Ejecuta el seguimiento y envío de correos de forma secuencial, omitiendo el ciclo si el
    * anterior sigue activo. Registra errores y siempre libera la bandera running para permitir
    * próximos intentos.
+   *
+   * @returns {Promise<void>} Termina el ciclo o lo omite si ya está en ejecución; registra sus errores.
    */
   const run = async () => {
     if (running) return;

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Respaldo PostgreSQL mediante pg_dump en formato custom. No realiza
+ * @file Respaldo PostgreSQL mediante pg_dump en formato custom. No realiza
  * exportación SQLite ni incluye archivos externos a la base.
  */
 
@@ -10,6 +10,11 @@ const {pgTool}=require('./postgres-tools');
  * Crea la carpeta de respaldos y ejecuta pg_dump en formato custom con un nombre fechado. Usa
  * BACKUP_DIR o .local/backups y, si existe PGSCHEMA, limita el respaldo a ese esquema; devuelve
  * la ruta del archivo.
+ *
+ * @returns {Promise<string>} Ruta absoluta del archivo .dump creado por pg_dump.
+ * @throws {Error} Propaga fallos de creación de carpeta, configuración y ejecución de pg_dump.
+ * @example
+ * const dumpPath = await backup();
  */
 async function backup(){
   const dir=path.resolve(process.env.BACKUP_DIR||path.join(__dirname,'../.local/backups'));

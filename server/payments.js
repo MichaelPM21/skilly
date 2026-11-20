@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Cobros del cliente: validar reserva y términos → crear intento → llamar a
+ * @file Cobros del cliente: validar reserva y términos → crear intento → llamar a
  * pasarela → verificar retorno → settle. Reserva y pago tienen estados separados. Cobros tardíos
  * van a revisión; una marca pagado no es una transferencia al profesional.
  */
@@ -129,6 +129,8 @@ function paymentsRoutes(app) {
   /**
    * Devuelve los adaptadores de pasarela inyectados en app.locals para pruebas o los módulos
    * reales de Webpay y PayPal.
+   *
+   * @returns {{webpay: Object, paypal: Object}} Adaptadores inyectados o módulos de las pasarelas.
    */
   const providers = () => app.locals.providers || {
     webpay: require('./webpay'),
@@ -137,11 +139,18 @@ function paymentsRoutes(app) {
   /**
    * Obtiene la URL pública de retorno de las pasarelas a partir de BASE_URL, con localhost:3000
    * como valor local.
+   *
+   * @returns {string} BASE_URL o http://localhost:3000.
    */
   const base = () => process.env.BASE_URL || 'http://localhost:3000';
   /**
    * Reúne pagos de las reservas permitidas a la sesión, adapta sus campos y elimina identidad
    * profesional para clientes cuya reserva aún no tiene pago confirmado. Responde un arreglo JSON.
+   *
+   * @param {import("express").Request} req - Sesión cuyo acceso limita las reservas consultadas.
+   * @param {import("express").Response} res - Respuesta JSON del listado de pagos.
+   * @returns {Promise<void>} Envía los pagos autorizados; no devuelve el listado al llamador.
+   * @throws {Error} Propaga errores de autorización y consulta.
    */
   async function paymentList(req, res) {
     res.json((await Promise.all((await listBookings(req)).map(/* Obtiene y transforma cada registro de forma asíncrona; el llamador reúne los resultados con Promise.all. */ async b => (await db.prepare('SELECT * FROM payments WHERE booking_id=? ORDER BY created_at DESC').all(b.id)).map(p => {
@@ -217,6 +226,9 @@ function paymentsRoutes(app) {
      * Redirige al sitio público con el resultado del retorno y el id de la reserva, si se encontró
      * el intento. La URL informa a la interfaz; el estado financiero proviene de la verificación del
      * servidor.
+     *
+     * @param {string} status - Resultado del retorno para el parámetro payment.
+     * @returns {void} Envía la redirección HTTP; no confirma el pago.
      */
     const redirect = status => res.redirect(base() + '/?payment=' + status + (p ? '&bookingId=' + encodeURIComponent(p.booking_id) : ''));
     if (!p) return redirect('error');
@@ -284,6 +296,9 @@ function paymentsRoutes(app) {
      * Redirige al sitio público con el resultado del retorno y el id de la reserva, si se encontró
      * el intento. La URL informa a la interfaz; el estado financiero proviene de la verificación del
      * servidor.
+     *
+     * @param {string} status - Resultado del retorno para el parámetro payment.
+     * @returns {void} Envía la redirección HTTP; no confirma el pago.
      */
     const redirect = status => res.redirect(base() + '/?payment=' + status + (p ? '&bookingId=' + encodeURIComponent(p.booking_id) : ''));
     if (!p) return redirect('error');

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Pruebas HTTP de flujo con aplicaciones locales, clientes de cookies
+ * @file Pruebas HTTP de flujo con aplicaciones locales, clientes de cookies
  * separadas y esquema PostgreSQL temporal. Los casos comparten datos creados en secuencia y
  * sustituyen pasarelas/SMTP por dobles controlados; no ejecutan cobros ni correos reales.
  */
@@ -26,6 +26,9 @@ let publicApp, adminApp, publicServer, adminServer, base, adminBase, admin, pro,
 /**
  * Construye un cliente HTTP de pruebas con cookie independiente para simular un usuario.
  * Devuelve call y un lector de cookie, sin utilizar el navegador ni una cuenta de producción.
+ *
+ * @param {string} url - Origen HTTP del servidor local de pruebas.
+ * @returns {{call: Function, cookie: string}} Cliente con peticiones y lectura de su cookie independiente.
  */
 function client(url) {
   let cookie = '';
@@ -33,6 +36,12 @@ function client(url) {
     /**
      * Envía una solicitud local con JSON, cabecera CSRF y cookie del cliente. Captura Set-Cookie y
      * devuelve estado, cuerpo y cabeceras sin seguir redirecciones, para comprobar retornos de pago.
+     *
+     * @param {string} route - Ruta relativa a /api/.
+     * @param {string} [method="GET"] - Método HTTP.
+     * @param {Object} [body] - Cuerpo JSON; se omite si es undefined.
+     * @returns {Promise<{status: number, data: *, headers: Headers}>} Estado, JSON o null si no se pudo leer, y cabeceras.
+     * @throws {Error} Propaga fallos de conexión HTTP.
      */
     async call(route, method = 'GET', body) {
       const r = await fetch(url + '/api/' + route, {
@@ -64,6 +73,8 @@ function client(url) {
     /**
      * Devuelve la cookie capturada por este cliente de pruebas para comprobar el aislamiento de
      * sesiones.
+     *
+     * @returns {string} Cookie capturada, inicialmente vacía.
      */
     get cookie() {
       return cookie;
@@ -73,6 +84,11 @@ function client(url) {
 /**
  * Espera una respuesta del cliente, exige el estado HTTP indicado y devuelve su cuerpo. La
  * aserción incluye el JSON recibido para diagnosticar fallos.
+ *
+ * @param {Promise<{status: number, data: *}>} p - Petición del cliente de pruebas.
+ * @param {number} [status=200] - Estado HTTP esperado.
+ * @returns {Promise<*>} Cuerpo de la respuesta cuyo estado coincide.
+ * @throws {Error} AssertionError si el estado difiere; propaga rechazos de la petición.
  */
 const success = async (p, status = 200) => {
   const r = await p;
@@ -82,6 +98,9 @@ const success = async (p, status = 200) => {
 /**
  * Construye una fecha AAAA-MM-DD desplazando días UTC respecto de hoy. Se usa para reservar
  * horarios relativos sin depender de una fecha fija ya vencida.
+ *
+ * @param {number} [offset=5] - Días UTC que se añaden a la fecha actual.
+ * @returns {string} Fecha AAAA-MM-DD para el escenario de prueba.
  */
 function futureDate(offset = 5) {
   const d = new Date();
@@ -93,6 +112,8 @@ let policyOffset = 35;
 /**
  * Crea una reserva de prueba en una fecha nueva, la acepta como profesional y la paga de forma
  * simulada. Devuelve la respuesta inicial para los escenarios de políticas.
+ *
+ * @returns {Promise<Object>} Respuesta original de creación; no se actualiza con las respuestas posteriores de aceptación y pago.
  */
 async function policyBooking() {
   const b = await success(org.call('bookings', 'POST', {
@@ -553,6 +574,11 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       /**
        * Simula la creación Webpay: genera token y orden, guarda una autorización controlada en memoria
        * y devuelve una URL de prueba. No contacta a Transbank.
+       *
+       * @param {Object} options - Datos del intento simulado.
+       * @param {string} options.bookingId - ID usado para formar buyOrder.
+       * @param {number} options.amount - Monto CLP preparado para la autorización simulada.
+       * @returns {Promise<{token: string, url: string, buyOrder: string}>} Datos controlados de redirección, sin solicitud a Transbank.
        */
       async createTransaction({
         bookingId,
@@ -579,6 +605,9 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       /**
        * Cuenta confirmaciones Webpay simuladas y devuelve la respuesta guardada para el token. Permite
        * demostrar que un retorno repetido no vuelve a confirmar.
+       *
+       * @param {string} token - Clave del estado guardado en orders.
+       * @returns {Promise<Object|undefined>} Estado simulado o undefined para un token no registrado.
        */
       async commitTransaction(token) {
         commits++;
@@ -587,6 +616,9 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       /**
        * Devuelve el estado Webpay preparado en memoria para probar conciliación sin conexión al
        * proveedor.
+       *
+       * @param {string} token - Clave del estado guardado en orders.
+       * @returns {Promise<Object|undefined>} Estado simulado o undefined para un token no registrado.
        */
       async statusTransaction(token) {
         return orders.get(token);
@@ -594,6 +626,8 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       /**
        * Incrementa el contador de devoluciones simuladas y devuelve un resultado Webpay exitoso.
        * Permite detectar llamadas duplicadas.
+       *
+       * @returns {Promise<{type: string, response_code: number}>} Resultado simulado REVERSED con código cero.
        */
       async refundTransaction() {
         refunds++;
@@ -607,11 +641,18 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       /**
        * Devuelve true para habilitar el adaptador PayPal simulado del escenario sin credenciales
        * externas.
+       *
+       * @returns {boolean} Siempre true para habilitar el doble de PayPal.
        */
       isConfigured: () => true,
       /**
        * Crea una orden PayPal ficticia con importe convertido y captura completada en memoria.
        * Devuelve datos controlados para probar verificación de reserva, moneda y monto.
+       *
+       * @param {Object} options - Datos del intento simulado.
+       * @param {string} options.bookingId - Referencia de la reserva.
+       * @param {number} options.amountClp - Monto convertido a USD usando 950 CLP por dólar en este doble.
+       * @returns {Promise<{orderId: string, approveUrl: string, usdAmount: number}>} Orden ficticia y URL de pruebas.
        */
       async createOrder({
         bookingId,
@@ -645,6 +686,9 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       /**
        * Cuenta capturas PayPal simuladas y devuelve la orden guardada, permitiendo verificar
        * idempotencia del retorno.
+       *
+       * @param {string} id - ID de orden almacenada en orders.
+       * @returns {Promise<Object|undefined>} Orden simulada o undefined si no se registró.
        */
       async captureOrder(id) {
         captures++;
@@ -652,6 +696,9 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       },
       /**
        * Devuelve una orden PayPal de la memoria de pruebas para el flujo de conciliación.
+       *
+       * @param {string} id - ID de orden almacenada en orders.
+       * @returns {Promise<Object|undefined>} Orden simulada o undefined si no se registró.
        */
       async getOrder(id) {
         return orders.get(id);
@@ -659,6 +706,8 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
       /**
        * Cuenta devoluciones PayPal simuladas y devuelve un id y estado COMPLETED sin enviar
        * solicitudes externas.
+       *
+       * @returns {Promise<{id: string, status: string}>} ID de devolución simulada con estado COMPLETED.
        */
       async refundCapture() {
         refunds++;
@@ -674,6 +723,9 @@ test('Payment provider confirmation, duplicate callbacks, tampering, late charge
   /**
    * Crea y acepta una reserva de prueba desplazada por offset días. Deja el pago pendiente para
    * probar creación, retornos y reembolsos de pasarelas.
+   *
+   * @param {number} offset - Días UTC de desplazamiento de la reserva.
+   * @returns {Promise<Object>} Respuesta original de creación después de aceptar la reserva en el servidor.
    */
   async function accepted(offset) {
     const b = await success(org.call('bookings', 'POST', {
@@ -984,6 +1036,9 @@ test('Uncertain refunds require evidence and never automatically repeat the prov
   /**
    * Simula un timeout de devolución y cuenta cuántas veces se intentó. El escenario verifica que
    * la incertidumbre bloquee un segundo envío al proveedor.
+   *
+   * @returns {Promise<never>} Promesa rechazada para representar un resultado de devolución incierto.
+   * @throws {Error} Siempre rechaza con el error de incertidumbre preparado por el escenario.
    */
   publicApp.locals.providers.webpay.refundTransaction = async () => {
     calls++;
@@ -1071,6 +1126,9 @@ test('Follow-up detects abandonment once; SMTP retry recovers without duplicate 
     /**
      * Simula un transporte SMTP sin conexión lanzando un error. Permite verificar que deliver
      * conserve el mensaje para reintento.
+     *
+     * @returns {Promise<never>} Promesa rechazada por el transporte simulado sin conexión.
+     * @throws {Error} Siempre lanza Error("offline").
      */
     sendMail: async () => {
       throw new Error('offline');
@@ -1081,6 +1139,8 @@ test('Follow-up detects abandonment once; SMTP retry recovers without duplicate 
     /**
      * Simula un envío SMTP exitoso con una demora breve y cuenta las invocaciones. Dos llamadas
      * concurrentes deben adquirir un único bloqueo de entrega.
+     *
+     * @returns {Promise<void>} Finaliza tras la demora simulada y el incremento del contador.
      */
     sendMail: async () => {
       calls++;
@@ -1179,6 +1239,9 @@ test('Late uncertain refunds can be reconciled without reviving an expired booki
   /**
    * Simula una devolución tardía de resultado incierto. La prueba verifica la conciliación externa
    * sin reactivar la reserva expirada.
+   *
+   * @returns {Promise<never>} Promesa rechazada para representar un resultado de devolución incierto.
+   * @throws {Error} Siempre rechaza con el error de incertidumbre preparado por el escenario.
    */
   provider.refundTransaction = async () => {
     throw new Error('uncertain');

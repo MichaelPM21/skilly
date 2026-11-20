@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Utilidades de autenticación y autorización compartidas. Contraseñas: scrypt
+ * @file Utilidades de autenticación y autorización compartidas. Contraseñas: scrypt
  * con sal; tokens: aleatorios y hash SHA-256; sesiones: cookie HttpOnly con audiencia
  * pública/admin. La propiedad de reservas se comprueba en bookings.access.
  */

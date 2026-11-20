@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Componentes base y funciones heredadas del navegador. Orden de carga: app.js
+ * @file Componentes base y funciones heredadas del navegador. Orden de carga: app.js
  * → booking-view.js → workspace.js → policies.js; administración añade admin-sidebar.js. Varias
  * funciones se reemplazan o se conservan mediante alias: leer su comentario antes de
  * modificarlas. La base vigente es PostgreSQL detrás de Express.
@@ -18,6 +18,11 @@ const Api = {
   /**
    * Consulta una colección de la API con GET y resuelve su JSON. Es el cliente inicial;
    * workspace.js reemplaza este método para unificar errores y solicitudes.
+   *
+   * @param {string} resource - Ruta relativa a /api/.
+   * @param {string} [query=""] - Sufijo de consulta, incluido ? cuando corresponda.
+   * @returns {Promise<*>} Cuerpo JSON de la respuesta.
+   * @throws {Error} Si la respuesta HTTP falla; también propaga errores de red o de lectura JSON.
    */
   async list(resource, query = '') {
     const r = await fetch(`/api/${resource}${query}`);
@@ -27,6 +32,11 @@ const Api = {
   /**
    * Envía JSON con POST y devuelve el recurso o lanza el mensaje del servidor. workspace.js
    * sustituye este método y añade la aceptación de términos a las operaciones de pago.
+   *
+   * @param {string} resource - Ruta relativa a /api/.
+   * @param {Object} data - Cuerpo JSON enviado.
+   * @returns {Promise<*>} Cuerpo JSON aceptado por el servidor.
+   * @throws {Error} Si la respuesta HTTP falla; también propaga errores de red o de lectura JSON.
    */
   async create(resource, data) {
     const r = await fetch(`/api/${resource}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -37,6 +47,13 @@ const Api = {
   /**
    * Envía un PATCH para el recurso e identificador recibidos. Implementación inicial que admite la
    * antigua cabecera administrativa; workspace.js la reemplaza por sesiones con cookie.
+   *
+   * @param {string} resource - Recurso de la API.
+   * @param {string} id - Identificador del recurso.
+   * @param {Object} data - Parche JSON.
+   * @param {boolean} [admin=false] - Selecciona la ruta y cabecera administrativas heredadas.
+   * @returns {Promise<*>} Cuerpo JSON aceptado por el servidor.
+   * @throws {Error} Si la respuesta HTTP falla; también propaga errores de red o de lectura JSON.
    */
   async update(resource, id, data, admin = false) {
     const headers = { 'Content-Type': 'application/json' };
@@ -49,6 +66,9 @@ const Api = {
   /**
    * Consulta un recurso administrativo con la antigua cabecera de clave y devuelve un arreglo
    * vacío ante error. Se reemplaza en workspace.js por la API autenticada vigente.
+   *
+   * @param {string} resource - Ruta relativa a /api/admin/.
+   * @returns {Promise<*>} JSON recibido o arreglo vacío si el estado HTTP no es satisfactorio.
    */
   async adminGet(resource) {
     const r = await fetch(`/api/admin/${resource}`, { headers: { 'x-admin-passcode': SESSION?.adminPasscode || '' } });
@@ -58,6 +78,9 @@ const Api = {
   /**
    * Intenta el ingreso administrativo con una clave compartida en una ruta heredada. No forma
    * parte del ingreso actual, que utiliza correo, contraseña y auth/login desde workspace.js.
+   *
+   * @param {string} passcode - Clave enviada al ingreso administrativo heredado.
+   * @returns {Promise<boolean|undefined>} Campo ok de la respuesta heredada.
    */
   async adminLogin(passcode) {
     const r = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passcode }) });
@@ -75,6 +98,8 @@ let EVALUATIONS = []; // solo se llena cuando hay sesión de admin
 /**
  * Recupera el objeto de sesión antiguo desde localStorage. workspace.js reemplaza esta función
  * por una operación vacía: la sesión vigente se consulta al servidor.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function loadSession() {
   try { const raw = localStorage.getItem('skilly_session'); SESSION = raw ? JSON.parse(raw) : null; } catch (e) { SESSION = null; }
@@ -83,6 +108,9 @@ function loadSession() {
  * Actualiza SESSION, persiste el objeto antiguo en localStorage y redibuja la cabecera. La
  * versión vigente de workspace.js elimina ese almacenamiento y conserva solo los datos de
  * presentación en memoria.
+ *
+ * @param {Object|null} s - Sesión local del prototipo o null para limpiarla.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function saveSession(s) {
   SESSION = s;
@@ -92,6 +120,8 @@ function saveSession(s) {
 /**
  * Limpia la sesión local antigua y vuelve al inicio. workspace.js la sustituye por un cierre que
  * también invalida la sesión del servidor.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function logout() { saveSession(null); toast('Sesión cerrada'); page('home'); }
 
@@ -99,6 +129,8 @@ function logout() { saveSession(null); toast('Sesión cerrada'); page('home'); }
  * Carga profesionales, reservas, pagos y evaluaciones administrativas y refresca las vistas
  * visibles. La versión de workspace.js agrega servicios y utiliza los datos ya filtrados por rol
  * desde la API.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function refreshAll() {
   const query = SESSION?.role === 'organizacion' ? '' : '';
@@ -121,6 +153,10 @@ async function refreshAll() {
 /**
  * Muestra un aviso temporal accesible y reinicia su temporizador de cierre. Si el diálogo de
  * autenticación está abierto, coloca el aviso dentro de él para que no quede detrás.
+ *
+ * @param {string} msg - Texto del aviso.
+ * @param {number} [ms=3200] - Tiempo visible en milisegundos.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function toast(msg, ms = 3200) {
   let t = document.getElementById('toastEl');
@@ -136,21 +172,41 @@ function toast(msg, ms = 3200) {
 /**
  * Formatea una cifra como pesos con separadores es-CL y prefijo $. Para cadenas elimina
  * caracteres no numéricos; es una utilidad de presentación, no validación financiera.
+ *
+ * @param {number|string} n - Importe o texto numérico para presentación.
+ * @returns {string} Importe formateado con prefijo $.
+ * @example
+ * fmtMoney(35000); // "$35.000"
  */
 function fmtMoney(n) { const num = typeof n === 'number' ? n : parseInt(String(n).replace(/[^0-9]/g, ''), 10) || 0; return '$' + num.toLocaleString('es-CL'); }
 /**
  * Extrae dígitos de un precio textual y devuelve un entero o cero. Es una conversión heredada
  * del cliente; el precio contractual vigente se toma del servidor.
+ *
+ * @param {*} p - Valor convertido a texto antes de extraer dígitos.
+ * @returns {number} Entero extraído o cero.
+ * @example
+ * parsePrice("$35.000"); // 35000
  */
 function parsePrice(p) { return parseInt(String(p).replace(/[^0-9]/g, ''), 10) || 0; }
 /**
  * Convierte &, <, > y comillas a entidades HTML antes de insertar texto en plantillas. No valida
  * URLs ni fragmentos de JavaScript.
+ *
+ * @param {*} s - Valor convertido a texto; null y undefined producen texto vacío.
+ * @returns {string} Texto con los cinco caracteres especiales escapados.
+ * @example
+ * escapeHtml("<texto>"); // "&lt;texto&gt;"
  */
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, /* Sustituye cada carácter especial por su entidad HTML para interpolar texto sin convertirlo en etiquetas. */ c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 /**
  * Toma las iniciales del nombre, limita a dos letras y las devuelve en mayúsculas para la
  * representación visual.
+ *
+ * @param {string} name - Nombre del que se extraen hasta dos iniciales.
+ * @returns {string} Hasta dos iniciales en mayúsculas.
+ * @example
+ * initials("Ana Pérez"); // "AP"
  */
 function initials(name) { return (name || '').split(' ').map(/* Extrae a[0] de cada elemento para formar la lista que necesita esta operación. */ a => a[0]).join('').slice(0, 2).toUpperCase(); }
 
@@ -158,6 +214,9 @@ function initials(name) { return (name || '').split(' ').map(/* Extrae a[0] de c
 /**
  * Alterna la sección visible, la navegación y sus renderizadores y detiene el sondeo de chat.
  * workspace.js reemplaza esta navegación con restricciones adicionales por aplicación y rol.
+ *
+ * @param {string} id - Identificador de sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function page(id) {
   if (typeof chatPollTimer !== 'undefined' && chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
@@ -177,6 +236,9 @@ function page(id) {
 /**
  * Abre el diálogo nativo de ingreso/registro con su modo y foco apropiados, o muestra un modal
  * convencional. El diálogo nativo mantiene la autenticación en la capa superior del navegador.
+ *
+ * @param {string} id - Identificador del modal o diálogo.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openM(id) {
   const dialog = document.getElementById('authDialog');
@@ -197,6 +259,9 @@ function openM(id) {
 /**
  * Cierra el diálogo nativo cuando corresponde a autenticación; para los otros modales quita la
  * clase show.
+ *
+ * @param {string} id - Identificador del modal o diálogo.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function closeM(id) {
   const dialog = document.getElementById('authDialog');
@@ -207,6 +272,8 @@ function closeM(id) {
 /**
  * Muestra nombre, rol y enlaces según SESSION en la cabecera inicial. workspace.js sustituye
  * esta versión para separar profesional, organización y aplicación administrativa.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderSession() {
   const box = document.getElementById('sessionBox');
@@ -233,6 +300,8 @@ function renderSession() {
 /**
  * Actualiza los contadores visibles de elementos validados y reservas con los arreglos cargados.
  * No realiza consultas nuevas ni calcula estadísticas globales del servidor.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function updateStats() {
   const p = document.getElementById('statProf'); const b = document.getElementById('statBookings');
@@ -243,10 +312,15 @@ function updateStats() {
 /* ---------------- Home / búsqueda rápida ---------------- */
 /**
  * Navega al catálogo, aplica el texto recibido al buscador y vuelve a dibujar los resultados.
+ *
+ * @param {string} q - Texto que se coloca en el buscador del catálogo.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function quick(q) { page('market'); document.getElementById('q').value = q; renderMarket(); }
 /**
  * Toma el texto del buscador principal y lo pasa a quick para abrir el catálogo filtrado.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function search() { quick(document.getElementById('heroInput').value); }
 
@@ -260,6 +334,8 @@ function search() { quick(document.getElementById('heroInput').value); }
  * Filtra los servicios cargados por texto, categoría y validación, prioriza recomendados y
  * genera tarjetas sin identidad profesional. workspace.js conserva este renderizador mediante
  * oldRenderMarket y restringe quién puede abrirlo.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderMarket() {
   const q = (document.getElementById('q')?.value || '').toLowerCase();
@@ -296,6 +372,9 @@ function renderMarket() {
  * Busca el servicio cargado y presenta descripción, precio, dedicación y disponibilidad en un
  * modal. No muestra antecedentes privados; workspace.js reutiliza esta función con guardas de
  * rol.
+ *
+ * @param {string} id - ID del elemento cargado que se mostrará.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openProfile(id) {
   const x = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === id. Se evalúan los datos ya cargados. */ p => p.id === id);
@@ -330,6 +409,9 @@ let loginRole = 'organizacion';
 /**
  * Alterna los campos de ingreso del prototipo según el rol elegido. workspace.js la reemplaza
  * para usar correo y contraseña también en administración.
+ *
+ * @param {string} role - Rol elegido en el formulario.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function setLoginRole(role) {
   loginRole = role;
@@ -340,6 +422,8 @@ function setLoginRole(role) {
 /**
  * Implementa el ingreso heredado por correo o clave administrativa compartida. Está reemplazado
  * por doLogin de workspace.js y no describe la autenticación vigente del servidor.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function doLogin() {
   if (loginRole === 'admin') {
@@ -369,6 +453,8 @@ let regRole = null, regStep = 1, regProDraft = {};
 /**
  * Reinicia rol, paso y borrador del asistente y abre el registro. workspace.js conserva esta
  * función mediante previousOpenRegister y agrega limpieza de errores.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openRegister() {
   regRole = null; regStep = 1; regProDraft = {};
@@ -377,6 +463,9 @@ function openRegister() {
 }
 /**
  * Guarda el rol seleccionado y avanza al formulario inicial correspondiente del asistente.
+ *
+ * @param {string} role - Tipo de cuenta seleccionado.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function chooseRegRole(role) {
   regRole = role;
@@ -386,6 +475,8 @@ function chooseRegRole(role) {
 /**
  * Muestra únicamente el paso de registro seleccionado y actualiza la barra de progreso. El paso
  * 9 representa la confirmación final.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function showRegStep() {
   document.getElementById('regStepRole').style.display = regStep === 1 ? 'block' : 'none';
@@ -401,12 +492,16 @@ function showRegStep() {
 /**
  * Retrocede desde antecedentes al formulario básico o desde el formulario básico a la selección
  * de rol y redibuja el asistente.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function regBack() { if (regStep > 1) { regStep = regStep === 3 ? 2 : 1; showRegStep(); } }
 
 /**
  * Crea únicamente una sesión local en el prototipo antiguo. Está reemplazada por el registro
  * real en auth/register de workspace.js.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function submitOrgRegister() {
   const name = document.getElementById('orgName').value.trim();
@@ -420,6 +515,8 @@ async function submitOrgRegister() {
  * Recoge los datos del primer servicio y disponibilidad en regProDraft y avanza a antecedentes.
  * workspace.js conserva esta función como oldProNext después de agregar validaciones de correo,
  * contraseña y precio.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function regProNext() {
   const name = document.getElementById('proName').value.trim();
@@ -443,6 +540,8 @@ function regProNext() {
 /**
  * Envía antecedentes al antiguo alta de professionals y arma una sesión local. workspace.js la
  * reemplaza por el registro transaccional de cuenta, perfil y servicio.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function submitProValidation() {
   const linkedin = document.getElementById('valLinkedin').value.trim();
@@ -463,6 +562,8 @@ async function submitProValidation() {
 }
 /**
  * Cierra el asistente terminado y abre el panel de la sesión actual.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function finishRegister() { closeM('register'); page('dashboard'); }
 
@@ -474,6 +575,9 @@ let bookingCtx = { professionalId: null, date: null, time: null };
  * Inicia el agendamiento heredado a partir de un profesional y ofrece alternativas a visitantes.
  * workspace.js lo sustituye por selección de un servicio independiente y solicitud previa a la
  * aceptación.
+ *
+ * @param {string} professionalId - ID del profesional en el flujo heredado.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function startBooking(professionalId) {
   const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === professionalId. Se evalúan los datos ya cargados. */ p => p.id === professionalId);
@@ -491,6 +595,9 @@ function startBooking(professionalId) {
 /**
  * Presenta las opciones antiguas de ingresar, registrarse o solicitar sin cuenta. El
  * startBooking vigente abre directamente el formulario de invitado y no usa este paso.
+ *
+ * @param {string} professionalId - ID del profesional en el flujo heredado.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openGuestChoice(professionalId) {
   const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === professionalId. Se evalúan los datos ya cargados. */ p => p.id === professionalId);
@@ -517,6 +624,9 @@ function openGuestChoice(professionalId) {
 /**
  * Dibuja el formulario heredado de invitado con horarios de la disponibilidad cargada.
  * workspace.js lo reemplaza y consulta horarios efectivos en el servidor.
+ *
+ * @param {string} professionalId - ID del profesional en el flujo heredado.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderGuestForm(professionalId) {
   const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === professionalId. Se evalúan los datos ya cargados. */ p => p.id === professionalId);
@@ -546,6 +656,9 @@ function renderGuestForm(professionalId) {
 /**
  * Envía la solicitud invitada desde el formulario antiguo y muestra su confirmación.
  * workspace.js sustituye esta versión por el flujo con reserva vinculada y enlace seguro.
+ *
+ * @param {string} professionalId - ID del profesional en el flujo heredado.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function submitGuestRequest(professionalId) {
   const contactName = document.getElementById('gName').value.trim();
@@ -572,6 +685,10 @@ async function submitGuestRequest(professionalId) {
  * Construye días candidatos desde la disponibilidad local del prototipo. workspace.js la
  * sustituye por un cálculo que parte de la fecha de Chile; los cupos reales siempre se consultan
  * a la API.
+ *
+ * @param {Object} prof - Perfil con availability.days.
+ * @param {number} [count=8] - Máximo de candidatos buscados, con horizonte de 30 días.
+ * @returns {Array<{date: Date, label: string, key: string}>} Candidatos con fecha, día de semana y clave; no acredita cupos libres.
  */
 function nextAvailableDays(prof, count = 8) {
   const out = []; const days = prof.availability?.days || []; let d = new Date(); let guard = 0;
@@ -585,6 +702,9 @@ function nextAvailableDays(prof, count = 8) {
 /**
  * Construye el selector de días, horarios y notas y consulta el primer día. workspace.js
  * reutiliza su estructura y corrige título y acción para solicitar un servicio antes del pago.
+ *
+ * @param {Object} prof - Perfil o servicio con nombre, título, precio y disponibilidad.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderBookingModal(prof) {
   const dayOpts = nextAvailableDays(prof);
@@ -607,6 +727,9 @@ function renderBookingModal(prof) {
 /**
  * Calcula horarios libres a partir de reservas cargadas en el cliente. La implementación vigente
  * de workspace.js consulta la disponibilidad del servidor, incluyendo preparación y seguimiento.
+ *
+ * @param {string} key - Fecha seleccionada en formato AAAA-MM-DD.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function pickBookingDay(key) {
   bookingCtx.date = key; bookingCtx.time = null;
@@ -623,6 +746,9 @@ async function pickBookingDay(key) {
 /**
  * Guarda la hora elegida, resalta su botón y habilita el envío de la solicitud. El servidor
  * vuelve a validar disponibilidad al crear la reserva.
+ *
+ * @param {string} t - Hora seleccionada en formato HH:mm.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function pickBookingTime(t) {
   bookingCtx.time = t;
@@ -632,6 +758,8 @@ function pickBookingTime(t) {
 /**
  * Envía los datos del agendamiento antiguo y abre directamente el pago. workspace.js reemplaza
  * esta función: el servidor fija precio y la solicitud debe ser aceptada antes de pagar.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function confirmBooking() {
   if (!bookingCtx.date || !bookingCtx.time) { toast('Elige un día y horario'); return; }
@@ -658,6 +786,8 @@ let SERVER_CONFIG = { mailerConfigured: false, paypalConfigured: false, webpayEn
 /**
  * Carga configuración pública de proveedores y entorno desde config. Si falla conserva los
  * valores existentes para que la interfaz pueda mostrar su estado inicial.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function loadServerConfig() {
   try { SERVER_CONFIG = await Api.list('config'); } catch (e) { /* usa valores por defecto */ }
@@ -667,6 +797,9 @@ async function loadServerConfig() {
  * Construye las opciones visuales de Webpay, PayPal y pago simulado para la reserva.
  * workspace.js conserva esta base y agrega condiciones y guardas; algunos textos heredados aún
  * describen toda liquidación como simulada.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openCheckout(bookingId) {
   const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === bookingId. Se evalúan los datos ya cargados. */ x => x.id === bookingId);
@@ -710,6 +843,9 @@ function openCheckout(bookingId) {
  * Solicita un intento de pago al servidor y envía token_ws mediante un formulario POST al
  * proveedor. Muestra errores de conexión; la confirmación financiera ocurre en el retorno del
  * servidor.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function payWithWebpay(bookingId) {
   try {
@@ -732,6 +868,9 @@ async function payWithWebpay(bookingId) {
 /**
  * Solicita la orden PayPal y redirige a approveUrl. Si el proveedor no devuelve enlace o la API
  * falla, presenta un aviso sin acreditar la reserva.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function payWithPaypal(bookingId) {
   try {
@@ -748,6 +887,9 @@ async function payWithPaypal(bookingId) {
 /**
  * Solicita un pago de prueba, refresca los datos y descarga el comprobante antes de abrir el
  * panel. La API restringe esta operación fuera de producción y no realiza un cargo bancario.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function payWithSimulated(bookingId) {
   try {
@@ -765,6 +907,8 @@ async function payWithSimulated(bookingId) {
 /**
  * Interpreta los parámetros del retorno de pasarela y, en el flujo antiguo, descarga el
  * comprobante. El arranque actual usa skillyInit de workspace.js para procesar el retorno.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function handlePaymentReturn() {
   const params = new URLSearchParams(window.location.search);
@@ -795,6 +939,10 @@ function handlePaymentReturn() {
  * Genera el comprobante textual heredado usando pago y reserva y descarga un Blob. workspace.js
  * sustituye esta función por otra que incorpora el desglose contractual; ninguna emite una
  * factura tributaria.
+ *
+ * @param {Object} payment - Pago con comprobante, importe y datos de proveedor.
+ * @param {Object} booking - Reserva con participantes, servicio, fecha y hora.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function downloadReceipt(payment, booking) {
   const providerLabel = { webpay: 'Webpay Plus (Transbank)', paypal: 'PayPal', simulado: 'Simulado' }[payment.provider] || payment.provider;
@@ -836,6 +984,9 @@ ${isReal
 /**
  * Envía el cambio antiguo a entregado sin evidencia. policies.js la reemplaza por un formulario
  * que solicita descripción de la prestación.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function markDelivered(bookingId) {
   try {
@@ -850,6 +1001,9 @@ let evalCtx = null;
 /**
  * Asocia el modal de evaluación a una reserva y limpia estrellas y comentario antes de
  * mostrarlo.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openEvaluate(bookingId) {
   evalCtx = bookingId;
@@ -860,6 +1014,9 @@ function openEvaluate(bookingId) {
 /**
  * Guarda el puntaje elegido y colorea las estrellas hasta ese valor. El servidor valida el rango
  * al recibir la evaluación.
+ *
+ * @param {number} n - Puntaje seleccionado; la validación definitiva corresponde al servidor.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function pickStar(n) {
   document.getElementById('evalStars').value = String(n);
@@ -868,6 +1025,8 @@ function pickStar(n) {
 /**
  * Exige estrellas y comentario, envía la evaluación privada y refresca el panel. La ruta también
  * confirma una reserva entregada; existe un botón separado para confirmar sin evaluar.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function submitEvaluation() {
   const stars = Number(document.getElementById('evalStars').value);
@@ -889,6 +1048,8 @@ async function submitEvaluation() {
 /**
  * Selecciona el panel inicial según la sesión. workspace.js reemplaza esta función y agrega
  * pestañas y acceso de invitados.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderDashboard() {
   const el = document.getElementById('dashContent');
@@ -900,6 +1061,9 @@ function renderDashboard() {
 /**
  * Construye el panel profesional antiguo de un único servicio, agenda y reservas. Está
  * reemplazado por las pestañas y múltiples servicios de workspace.js.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderProDashboard(el) {
   const prof = PROFESSIONALS.find(/* Busca el primer elemento según la condición p.id === SESSION.professionalId. Se evalúan los datos ya cargados. */ p => p.id === SESSION.professionalId);
@@ -1007,6 +1171,9 @@ function renderProDashboard(el) {
  * Envía cambios del servicio al perfil en el panel heredado. La interfaz vigente utiliza
  * saveService y la tabla services con revisión, por lo que este camino no administra
  * publicaciones actuales.
+ *
+ * @param {string} id - ID del perfil profesional que se actualizará.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function saveMyService(id) {
   const tags = document.getElementById('svcTags').value.trim();
@@ -1028,6 +1195,9 @@ async function saveMyService(id) {
 /**
  * Envía los días y horarios del formulario profesional heredado. La interfaz vigente usa
  * saveAvailability, que además incluye jornada y fechas bloqueadas.
+ *
+ * @param {string} id - ID del perfil profesional que se actualizará.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function saveMyAvailability(id) {
   const days = Array.from(document.querySelectorAll('.svcDay:checked')).map(/* Extrae c.value de cada elemento para formar la lista que necesita esta operación. */ c => c.value);
@@ -1044,11 +1214,17 @@ async function saveMyAvailability(id) {
 /**
  * Envía límites y tiempos desde el panel profesional heredado. La interfaz vigente separa
  * capacidad del profesional y duración de cada servicio.
+ *
+ * @param {string} id - ID del perfil profesional que se actualizará.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function saveMyCapacity(id) {
   /**
    * Lee un campo numérico por id y devuelve null si está vacío o Number si tiene valor. null
    * representa ausencia de límite en los formularios de capacidad.
+   *
+   * @param {string} elId - ID de un campo numérico del formulario.
+   * @returns {number|null} null si el campo está vacío; Number del contenido en otro caso, incluso NaN.
    */
   const val = (elId) => { const v = document.getElementById(elId).value; return v === '' ? null : Number(v); };
   try {
@@ -1065,6 +1241,9 @@ async function saveMyCapacity(id) {
 /**
  * Reenvía antecedentes del formulario heredado al perfil y refresca los datos. workspace.js
  * sustituye la lectura de campos e incluye portafolio y motivación.
+ *
+ * @param {string} id - ID del perfil profesional que se actualizará.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function resubmitValidation(id) {
   const validation = {
@@ -1086,6 +1265,9 @@ async function resubmitValidation(id) {
  * Genera el historial heredado filtrando reservas por correo y usando estados antiguos.
  * workspace.js lo reemplaza por datos autorizados en servidor y pestañas para organizaciones e
  * invitados.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderOrgDashboard(el) {
   const myBookings = BOOKINGS.filter(/* Conserva los elementos según la condición b.orgEmail === SESSION.email. Se evalúan los datos ya cargados. */ b => b.orgEmail === SESSION.email).sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
@@ -1094,6 +1276,9 @@ function renderOrgDashboard(el) {
   /**
    * Predicado del panel heredado que considera revelada la identidad si el estado no es reservado.
    * No debe usarse como regla actual: bookingView del servidor decide según paid_at.
+   *
+   * @param {string} status - Estado de la reserva en el modelo heredado.
+   * @returns {boolean} false únicamente para reservado; no representa la regla vigente de privacidad.
    */
   const identityRevealed = (status) => !['reservado'].includes(status);
   el.innerHTML = `
@@ -1125,6 +1310,10 @@ function renderOrgDashboard(el) {
 /**
  * Localiza el pago y la reserva en memoria y delega en la versión vigente de downloadReceipt si
  * ambos existen.
+ *
+ * @param {string} paymentId - Pago que se busca en memoria.
+ * @param {string} bookingId - Reserva que se busca en memoria.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function downloadReceiptFor(paymentId, bookingId) {
   const p = PAYMENTS.find(/* Busca el primer elemento según la condición x.id === paymentId. Se evalúan los datos ya cargados. */ x => x.id === paymentId); const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === bookingId. Se evalúan los datos ya cargados. */ x => x.id === bookingId);
@@ -1133,6 +1322,9 @@ function downloadReceiptFor(paymentId, bookingId) {
 /**
  * Traduce los estados iniciales de reserva. workspace.js sustituye el mapa por uno que incluye
  * solicitudes, confirmación, expiración y conciliación.
+ *
+ * @param {string} s - Código de estado o texto de respaldo.
+ * @returns {string} Etiqueta conocida o código original.
  */
 function bookingStatusLabel(s) {
   return { reservado: 'Reservado, pendiente de pago', pagado: 'Pagado · servicio en curso', entregado: 'Entregado, esperando confirmación', completado: 'Completado y evaluado', cancelado: 'Cancelado' }[s] || s;
@@ -1145,11 +1337,16 @@ let ORGANIZATIONS = [];
 /**
  * Selecciona una pestaña administrativa del diseño inicial. workspace.js reemplaza esta entrada
  * para delegar en adminNavigate del menú lateral.
+ *
+ * @param {string} tab - Pestaña administrativa a mostrar.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function setAdminTab(tab) { adminTab = tab; document.querySelectorAll('.adminTabs button').forEach(/* Sincroniza la clase visual de cada control con la opción o sección actualmente seleccionada. */ b => b.classList.toggle('on', b.dataset.tab === tab)); renderAdmin(); }
 /**
  * Distribuye las secciones administrativas tradicionales según adminTab. workspace.js conserva
  * esta función como previousAdminRender para las secciones que reutiliza.
+ *
+ * @returns {void|Promise<void>} Resultado del renderizador seleccionado; algunas secciones son asíncronas.
  */
 function renderAdmin() {
   const el = document.getElementById('adminContent');
@@ -1167,6 +1364,8 @@ function renderAdmin() {
 /**
  * Consulta los indicadores administrativos y resuelve el JSON. Conserva una cabecera antigua sin
  * efecto de autorización; el servidor vigente comprueba la cookie y el rol.
+ *
+ * @returns {Promise<Object>} JSON de indicadores recibido; esta función no comprueba r.ok.
  */
 async function fetchDashboardData() {
   const r = await fetch('/api/admin/dashboard', { headers: { 'x-admin-passcode': SESSION.adminPasscode || '' } });
@@ -1177,6 +1376,8 @@ async function fetchDashboardData() {
  * Carga el resumen administrativo y genera indicadores, barras por estado y proveedor y avisos
  * de capacidad. Representa los agregados recibidos; algunos rótulos conservan referencias
  * antiguas a liquidación simulada.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderBigDashboard() {
   const el = document.getElementById('bigDashboardContent');
@@ -1186,11 +1387,22 @@ async function renderBigDashboard() {
 
   /**
    * Devuelve el HTML de una tarjeta de indicador con etiqueta, valor y texto secundario opcional.
+   *
+   * @param {string} label - Etiqueta HTML de confianza.
+   * @param {string|number} value - Valor de presentación.
+   * @param {string} [sub=""] - Texto secundario HTML de confianza.
+   * @returns {string} HTML de una tarjeta de indicador.
    */
   const kpi = (label, value, sub = '') => `<div class="kpiCard"><span class="kpiLabel">${label}</span><b class="kpiValue">${value}</b>${sub ? `<span class="kpiSub">${sub}</span>` : ''}</div>`;
   /**
    * Genera una barra cuyo ancho corresponde a value/total y evita dividir por cero. Utiliza la
    * etiqueta y el color de presentación recibidos.
+   *
+   * @param {string} label - Etiqueta HTML de confianza.
+   * @param {number} value - Cantidad de la categoría.
+   * @param {number} total - Total utilizado para calcular el ancho.
+   * @param {string} color - Color CSS de confianza.
+   * @returns {string} HTML de una barra proporcional.
    */
   const bar = (label, value, total, color) => `<div class="barRow"><span>${label}</span><div class="barTrack"><div class="barFill" style="width:${total ? (value / total * 100) : 0}%;background:${color}"></div></div><b>${value}</b></div>`;
 
@@ -1235,6 +1447,9 @@ async function renderBigDashboard() {
  * Consulta solicitudes invitadas y genera tarjetas con contacto, notas y responsable.
  * workspace.js reutiliza este renderizador y agrega el envío al profesional cuando la reserva
  * sigue en gestion_skilly.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderAdminGuestRequests(el) {
   el.innerHTML = '<div class="loading">Cargando solicitudes...</div>';
@@ -1268,6 +1483,10 @@ async function renderAdminGuestRequests(el) {
 /**
  * Guarda estado, notas y responsable de una solicitud invitada y recarga su listado. La API
  * valida que descartar no omita la cancelación de una reserva ya tramitada.
+ *
+ * @param {string} id - ID de la solicitud invitada.
+ * @param {string} status - Nuevo estado que validará la API.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function updateGuestRequest(id, status) {
   const notesEl = document.getElementById('gnotes-' + id);
@@ -1286,6 +1505,9 @@ async function updateGuestRequest(id, status) {
 /**
  * Invoca la conversión heredada de una solicitud y refresca los datos. workspace.js reemplaza
  * esta función para explicar el envío al profesional para aceptar o rechazar.
+ *
+ * @param {string} id - ID de la solicitud invitada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function convertGuestRequest(id) {
   try {
@@ -1300,6 +1522,9 @@ async function convertGuestRequest(id) {
 /**
  * Muestra perfiles pendientes o con información solicitada, ordenados del más antiguo al más
  * reciente. Presenta antecedentes y controles para registrar la revisión.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderAdminValidations(el) {
   const pending = PROFESSIONALS.filter(/* Conserva los elementos según la condición p.status === 'pendiente' || p.status === 'info_solicitada'. Se evalúan los datos ya cargados. */ p => p.status === 'pendiente' || p.status === 'info_solicitada').sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => a.createdAt - b.createdAt);
@@ -1334,6 +1559,10 @@ function renderAdminValidations(el) {
  * Recoge observaciones y responsable, exige una nota para rechazo o información faltante y envía
  * la revisión del perfil. Actualiza la interfaz y comunica el resultado del intento de
  * notificación.
+ *
+ * @param {string} id - ID del perfil.
+ * @param {string} status - Resultado de revisión enviado al servidor.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function reviewProfessional(id, status) {
   const notesEl = document.getElementById('notes-' + id);
@@ -1352,6 +1581,9 @@ async function reviewProfessional(id, status) {
 /**
  * Lista profesionales con estado, recomendación, promedio privado y capacidad. Las evaluaciones
  * proceden de la API administrativa y no se publican en el catálogo.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderAdminProfessionals(el) {
   const arr = [...PROFESSIONALS].sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
@@ -1385,11 +1617,17 @@ function renderAdminProfessionals(el) {
 /**
  * Guarda límites diarios, semanales, mensuales y asignación del profesional desde
  * administración. Los campos vacíos se envían como null para quitar el límite.
+ *
+ * @param {string} id - ID del perfil profesional que se actualizará.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function saveProfessionalCapacity(id) {
   /**
    * Lee un campo numérico por id y devuelve null si está vacío o Number si tiene valor. null
    * representa ausencia de límite en los formularios de capacidad.
+   *
+   * @param {string} elId - ID de un campo numérico del formulario.
+   * @returns {number|null} null si el campo está vacío; Number del contenido en otro caso, incluso NaN.
    */
   const val = (elId) => { const v = document.getElementById(elId).value; return v === '' ? null : Number(v); };
   try {
@@ -1403,6 +1641,10 @@ async function saveProfessionalCapacity(id) {
 /**
  * Actualiza el indicador de recomendación editorial del profesional y refresca el panel. No
  * cambia su validación ni aprueba un servicio pendiente.
+ *
+ * @param {string} id - ID del profesional.
+ * @param {boolean} val - Valor de recomendación editorial.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function toggleRecommended(id, val) {
   try { await Api.update('professionals', id, { recommended: val }, true); await refreshAll(); renderAdmin(); }
@@ -1411,6 +1653,9 @@ async function toggleRecommended(id, val) {
 /**
  * Ordena y muestra evaluaciones privadas con estrellas, comentario, organización y fecha para el
  * equipo Skilly.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderAdminEvaluations(el) {
   const arr = [...EVALUATIONS].sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
@@ -1427,12 +1672,15 @@ function renderAdminEvaluations(el) {
 /**
  * Genera el listado administrativo heredado de pagos. El renderAdmin vigente usa paymentCards y
  * el panel de operaciones para conciliación y liquidaciones.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderAdminPayments(el) {
   const arr = [...PAYMENTS].sort(/* Ordena por fecha de creación con el sentido indicado en la resta, para presentar el historial o la cola de revisión. */ (a, b) => b.createdAt - a.createdAt);
   if (!arr.length) { el.innerHTML = '<div class="empty">Aún no hay pagos registrados.</div>'; return; }
   el.innerHTML = `<div class="adminList">` + arr.map(p => {
-    // Transforma los estados o valores del resultado para compararlos con lo esperado por la prueba.
+    // Construye una tarjeta administrativa por pago a partir de los registros cargados.
     
     const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === p.bookingId. Se evalúan los datos ya cargados. */ x => x.id === p.bookingId);
     return `<div class="adminRow">
@@ -1455,6 +1703,9 @@ let calendarProfFilter = '';
 /**
  * Desplaza el mes del calendario heredado y limpia la selección diaria. El calendario vigente
  * usa calendarMove y su propio estado.
+ *
+ * @param {number} delta - Número de meses de desplazamiento, positivo o negativo.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function shiftMonth(delta) {
   const [y, m] = calendarMonth.split('-').map(Number);
@@ -1466,12 +1717,18 @@ function shiftMonth(delta) {
 /**
  * Cambia el filtro del calendario antiguo y lo redibuja. La interfaz vigente usa calProfessional
  * dentro de renderCalendar.
+ *
+ * @param {string} id - ID del profesional seleccionado o valor vacío del filtro.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function setCalendarProfFilter(id) { calendarProfFilter = id; renderAdminCalendar(document.getElementById('adminContent')); }
 
 /**
  * Construye el calendario mensual heredado y su detalle por día. workspace.js reemplaza la
  * función por el calendario compartido con vistas mensual, semanal y diaria.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderAdminCalendar(el) {
   const [year, month] = calendarMonth.split('-').map(Number);
@@ -1528,12 +1785,17 @@ function renderAdminCalendar(el) {
 /**
  * Guarda el día elegido en el calendario heredado y vuelve a dibujarlo. El calendario actual
  * maneja calDate y calendarMode.
+ *
+ * @param {string} dateStr - Día en formato AAAA-MM-DD.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function selectCalendarDay(dateStr) { calendarSelectedDay = dateStr; renderAdminCalendar(document.getElementById('adminContent')); }
 
 /**
  * Dibuja reservas y alternativas horarias del día en el calendario antiguo. No es la validación
  * definitiva de agenda; la implementación vigente usa renderCalendar y la API.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function renderCalendarDayDetail() {
   const el = document.getElementById('calDayDetail');
@@ -1575,6 +1837,9 @@ function renderCalendarDayDetail() {
 /**
  * Envía una nueva hora desde el selector del calendario antiguo. workspace.js reemplaza esta
  * función por un modal que permite cambiar fecha y hora.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function rescheduleBooking(bookingId) {
   const sel = document.getElementById('resched-' + bookingId);
@@ -1591,6 +1856,10 @@ async function rescheduleBooking(bookingId) {
 /**
  * Calcula la devolución visual del prototipo con el porcentaje global. policies.js sustituye
  * esta función y consulta la política congelada de la reserva al servidor.
+ *
+ * @param {string} bookingId - Reserva seleccionada.
+ * @param {boolean} [fromAdmin=false] - Indica si se abrió desde administración.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openCancelModal(bookingId, fromAdmin = false) {
   const b = BOOKINGS.find(/* Busca el primer elemento según la condición x.id === bookingId. Se evalúan los datos ya cargados. */ x => x.id === bookingId);
@@ -1616,6 +1885,10 @@ function openCancelModal(bookingId, fromAdmin = false) {
 /**
  * Envía la cancelación desde el modal antiguo y actualiza el listado. policies.js reemplaza esta
  * función e incorpora el porcentaje administrativo cuando corresponde.
+ *
+ * @param {string} bookingId - Reserva que se cancelará.
+ * @param {boolean} fromAdmin - Selecciona la actualización del panel administrativo.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function confirmCancelBooking(bookingId, fromAdmin) {
   const reason = document.getElementById('cancelReason').value.trim();
@@ -1642,6 +1915,9 @@ async function confirmCancelBooking(bookingId, fromAdmin) {
 /**
  * Consulta el informe de organizaciones y dibuja indicadores e historial desplegable por correo
  * de contacto.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderAdminOrganizations(el) {
   el.innerHTML = '<div class="loading">Cargando organizaciones...</div>';
@@ -1667,6 +1943,9 @@ async function renderAdminOrganizations(el) {
 /**
  * Alterna la visibilidad del historial de la organización indicada por su posición en el
  * listado.
+ *
+ * @param {number} i - Índice del historial en el listado de organizaciones.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function toggleOrgHistory(i) {
   const el = document.getElementById('orgHistory-' + i);
@@ -1677,6 +1956,9 @@ function toggleOrgHistory(i) {
 /**
  * Carga el formulario inicial de capacidad y cancelación. workspace.js sustituye esta versión y
  * añade comisión general y plazos de respuesta y pago.
+ *
+ * @param {HTMLElement} el - Contenedor donde se dibuja la sección.
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderAdminSettings(el) {
   el.innerHTML = '<div class="loading">Cargando ajustes...</div>';
@@ -1700,6 +1982,8 @@ async function renderAdminSettings(el) {
 /**
  * Envía los dos ajustes del formulario heredado y recarga configuración pública. workspace.js
  * reemplaza la función para guardar también comisiones y plazos.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function saveSettings() {
   try {
@@ -1722,6 +2006,9 @@ let chatPollTimer = null;
 /**
  * Abre el chat heredado y comienza consultas cada cuatro segundos. workspace.js reemplaza la
  * construcción del modal, conservando el mismo temporizador compartido.
+ *
+ * @param {string} bookingId - ID de la reserva seleccionada.
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function openChat(bookingId) {
   chatBookingId = bookingId;
@@ -1733,6 +2020,8 @@ function openChat(bookingId) {
 /**
  * Cierra el modal y cancela el sondeo periódico de mensajes para evitar consultas cuando la
  * conversación ya no está visible.
+ *
+ * @returns {void} Actualiza la interfaz o el estado local sin devolver datos.
  */
 function closeChat() {
   closeM('chat');
@@ -1743,6 +2032,8 @@ function closeChat() {
 /**
  * Reconstruye la conversación heredada a partir de la API. workspace.js sustituye esta función
  * para mantener el campo de escritura y respetar la posición de lectura.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function renderChat() {
   if (!chatBookingId || !document.getElementById('chat').classList.contains('show')) return;
@@ -1778,6 +2069,8 @@ async function renderChat() {
 /**
  * Envía el mensaje con campos de remitente del cliente heredado. workspace.js lo reemplaza y
  * solo envía el cuerpo; el servidor determina autor y rol.
+ *
+ * @returns {Promise<void>} Finaliza la operación de interfaz sin devolver datos.
  */
 async function sendChatMessage() {
   const input = document.getElementById('chatInput');

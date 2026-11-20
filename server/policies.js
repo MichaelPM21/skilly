@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Reglas congeladas por reserva. Distingue devolución voluntaria, tolerancia y
+ * @file Reglas congeladas por reserva. Distingue devolución voluntaria, tolerancia y
  * plazos; el incumplimiento profesional confirmado se aplica desde settlements/governance. Son
  * reglas del producto codificadas, no una validación jurídica.
  */

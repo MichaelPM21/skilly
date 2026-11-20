@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Comprobación estática: ejecuta node --check sobre JavaScript de servidor,
+ * @file Comprobación estática: ejecuta node --check sobre JavaScript de servidor,
  * scripts, navegador y pruebas. No importa la aplicación ni abre la base de datos; un error
  * conserva salida distinta de cero.
  */

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Cálculos puros de presentación compartidos por el navegador y pruebas Node.
+ * @file Cálculos puros de presentación compartidos por el navegador y pruebas Node.
  * Distingue estados de servicio y de pago y no modifica los snapshots financieros de la reserva.
  */
 
@@ -11,6 +11,12 @@
   /**
    * Convierte un valor a número finito o cero para cálculos de presentación. No modifica los
    * importes contractuales almacenados.
+   *
+   * @param {*} value - Valor que se intenta convertir con Number.
+   * @returns {number} Número finito o cero si la conversión no produce un valor finito.
+   * @example
+   * money("35000"); // 35000
+   * money(undefined); // 0
    */
   const money = value => Number.isFinite(Number(value)) ? Number(value) : 0;
   /**

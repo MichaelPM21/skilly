@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Generación de SQL académico y diccionario físico a partir del esquema
+ * @file Generación de SQL académico y diccionario físico a partir del esquema
  * actual. Escribe scripts y documentación local sin exportar filas de clientes. Los scripts de
  * eliminación deben reservarse para esquemas desechables.
  */
@@ -12,6 +12,12 @@ const {db}=require('../server/db');
  * Consulta metadatos PostgreSQL y combina restricciones e índices con el SQL inicial para
  * generar scripts académicos y diccionario físico. Escribe estructura y relaciones, nunca filas
  * de negocio; los scripts DROP generados son para bases desechables.
+ *
+ * @returns {Promise<void>} Escribe los scripts y el diccionario en sus carpetas de salida y muestra el conteo.
+ * @throws {Error} Propaga errores de PostgreSQL y del sistema de archivos.
+ * @example
+ * // La entrada del script invoca exportSchema y cierra el pool al terminar.
+ * await exportSchema();
  */
 async function exportSchema(){
  const out=path.join(__dirname,'../database/schema-exports');fs.mkdirSync(out,{recursive:true});
@@ -22,6 +28,13 @@ async function exportSchema(){
  /**
   * Escribe UTF-8 en database/schema-exports para archivos SQL o en .local/schema-docs para
   * informes. La extensión determina el destino.
+  *
+  * @param {string} file - Nombre de salida; .sql selecciona schema-exports, otra extensión schema-docs.
+  * @param {string} content - Contenido que se escribe en UTF-8.
+  * @returns {void} Escribe o sustituye el archivo de salida.
+  * @throws {Error} Propaga errores de escritura.
+  * @example
+  * write("01-tablas.sql", sql);
   */
  const write=(file,content)=>fs.writeFileSync(path.join(file.endsWith('.sql')?out:reports,file),content,'utf8');
  const tables=(await db.query("SELECT tablename FROM pg_tables WHERE schemaname=current_schema() ORDER BY tablename")).rows.map(/* Extrae r.tablename de cada elemento para formar la lista que necesita esta operación. */ r=>r.tablename);

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Validación pura de contacto, reutilizada por actualización de perfil y
+ * @file Validación pura de contacto, reutilizada por actualización de perfil y
  * pruebas. No lee ni escribe la base: el llamador persiste únicamente cuando todas las
  * validaciones terminan.
  */
@@ -24,6 +24,11 @@ function contactProfile(body) {
   /**
    * Lee un campo opcional del cuerpo, exige texto dentro del máximo y elimina espacios exteriores.
    * Usa cadena vacía cuando el dato no fue proporcionado.
+   *
+   * @param {string} name - Nombre del campo en body.
+   * @param {number} max - Longitud máxima antes de recortar espacios.
+   * @returns {string} Texto recortado o cadena vacía para un valor ausente.
+   * @throws {Error} Si el valor no es texto o excede max.
    */
   function field(name, max) {
     const value = body[name] ?? '';

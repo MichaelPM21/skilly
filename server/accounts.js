@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Cuentas y sesiones: registro → correo de verificación → acceso por cookie.
+ * @file Cuentas y sesiones: registro → correo de verificación → acceso por cookie.
  * El registro profesional guarda usuario, perfil y primer servicio pendientes; recuperación e
  * invitaciones consumen tokens. Los invitados acceden a una sola reserva.
  */
@@ -88,6 +88,8 @@ function authRoutes(app) {
   /**
    * Obtiene la URL de la aplicación actual para construir enlaces de correo. Usa ADMIN_URL para
    * administración y BASE_URL para el sitio público, con valores locales por defecto.
+   *
+   * @returns {string} URL base configurada para la aplicación actual.
    */
   const base = () => app.locals.kind === 'admin' ? process.env.ADMIN_URL || 'http://localhost:3001' : process.env.BASE_URL || 'http://localhost:3000';
   /**

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Bandeja persistente outbox. enqueue guarda; deliver adquiere un bloqueo
+ * @file Bandeja persistente outbox. enqueue guarda; deliver adquiere un bloqueo
  * temporal e intenta SMTP; flush procesa pendientes. Incluye cinco intentos y espera creciente;
  * un fallo tras aceptación SMTP todavía puede producir duplicado al reintentar.
  */

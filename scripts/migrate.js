@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Punto de entrada de npm run db:migrate. Ejecuta la migración PostgreSQL y
+ * @file Punto de entrada de npm run db:migrate. Ejecuta la migración PostgreSQL y
  * cierra el pool tanto si termina bien como si informa un error.
  */
 

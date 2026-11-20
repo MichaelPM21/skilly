@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Devoluciones y liquidación externa. Cancelar registra primero una operación,
+ * @file Devoluciones y liquidación externa. Cancelar registra primero una operación,
  * luego llama al proveedor y concilia su resultado. Una orden de payout registra trabajo
  * administrativo: la transferencia bancaria se realiza fuera de Skilly.
  */
@@ -24,6 +24,18 @@ const notify = require('./notifications');
  * Registra de forma atómica una devolución ya confirmada, actualiza pago y notificaciones y,
  * salvo cobros tardíos, cancela la reserva. Guarda el remanente como pendiente de acuerdo, sin
  * convertirlo automáticamente en comisión o liquidación.
+ *
+ * @param {Object} op - Operación de devolución existente.
+ * @param {string} op.id - ID de refund_operations.
+ * @param {string} op.booking_id - Reserva de la operación.
+ * @param {string|null} op.payment_id - Pago asociado, si existe.
+ * @param {number} op.amount - Importe de devolución CLP.
+ * @param {number} op.percent - Porcentaje registrado para cancelaciones.
+ * @param {string} op.reason - Motivo registrado.
+ * @param {string} [op.kind] - tardio evita cancelar la reserva.
+ * @param {string} reference - Referencia de la devolución confirmada.
+ * @returns {Promise<void>} Persiste el resultado y registra la notificación dentro de la transacción.
+ * @throws {Error} Propaga errores de persistencia o de acceso a una reserva inexistente.
  */
 async function finish(op, reference) {
   await db.transaction(async () => {

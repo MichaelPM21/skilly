@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Pruebas puras de validación de contacto y presentación financiera. No
+ * @file Pruebas puras de validación de contacto y presentación financiera. No
  * requieren PostgreSQL, servidores HTTP ni credenciales externas.
  */
 

@@ -1,5 +1,5 @@
 /**
- * Flujo del módulo. Control del menú de la aplicación administrativa. Se carga después de
+ * @file Control del menú de la aplicación administrativa. Se carga después de
  * workspace.js y usa sus utilidades y adminItems. Combina botones, arrastre y teclado en
  * escritorio con un cajón accesible en móvil.
  */
@@ -13,6 +13,11 @@ let railDrawerOpen = false;
 /**
  * Sincroniza ancho, modo compacto o cajón móvil, fondo y atributos ARIA con el estado del menú.
  * En móvil cerrado aplica inert para evitar foco en controles ocultos.
+ *
+ * @returns {void} Sincroniza DOM y atributos ARIA con el estado actual.
+ * @example
+ * // En la aplicación administrativa, con los elementos del menú disponibles:
+ * renderRail();
  */
 function renderRail() {
   const rail = $('sideRail');
@@ -35,6 +40,11 @@ function renderRail() {
 /**
  * Muestra u oculta la barra según la sesión administrativa, limpia el cajón al salir y actualiza
  * el diseño.
+ *
+ * @param {boolean} signedIn - Indica si existe una sesión administrativa visible en la interfaz.
+ * @returns {void} Actualiza visibilidad del menú y su estado; no autentica al usuario.
+ * @example
+ * updateRailSession(true);
  */
 function updateRailSession(signedIn) {
   $('sideRail').hidden = !signedIn;
@@ -46,6 +56,11 @@ function updateRailSession(signedIn) {
 /**
  * Alterna entre 56 y 240 píxeles en escritorio o abre/cierra el cajón móvil. En móvil mueve el
  * foco al botón visible apropiado.
+ *
+ * @returns {void} Alterna el panel y ajusta el foco cuando corresponde.
+ * @example
+ * // En la aplicación administrativa, con los elementos del menú disponibles:
+ * toggleRail();
  */
 function toggleRail() {
   if (railMobileQuery.matches) {
@@ -61,6 +76,11 @@ function toggleRail() {
 /**
  * Selecciona la sección administrativa, cierra el cajón móvil y actualiza la página y
  * aria-current de los botones.
+ *
+ * @param {string} section - Clave de adminItems; dashboard abre bigDashboard.
+ * @returns {void} Selecciona sección, actualiza página y aria-current.
+ * @example
+ * adminNavigate("servicios");
  */
 function adminNavigate(section) {
   adminSection = section;
@@ -79,6 +99,11 @@ function adminNavigate(section) {
  * Construye los botones de adminItems y conecta navegación, ayudas, arrastre, teclado y cambios
  * de tamaño. El menú actual se contrae con botón/arrastre; pointerover muestra ayudas en modo
  * compacto, no abre automáticamente todo el panel.
+ *
+ * @returns {void} Crea botones y registra manejadores; requiere el DOM administrativo cargado.
+ * @example
+ * // En la aplicación administrativa, con los elementos del menú disponibles:
+ * buildSidebar();
  */
 function buildSidebar() {
   const rail = $('sideRail');
@@ -100,6 +125,11 @@ function buildSidebar() {
   /**
    * Muestra la etiqueta del botón bajo el puntero o foco cuando el menú está compacto,
    * posicionándola junto al botón.
+   *
+   * @param {PointerEvent|FocusEvent} event - Evento delegado cuyo target permite localizar el botón del menú.
+   * @returns {void} Muestra ayuda solo en modo compacto y sobre un botón.
+   * @example
+   * nav.addEventListener("focusin", showTip);
    */
   function showTip(event) {
     const button = event.target.closest('button');
@@ -118,6 +148,11 @@ function buildSidebar() {
   }
   /**
    * Limita el ancho solicitado al intervalo 56–240 píxeles, lo redondea y actualiza el menú.
+   *
+   * @param {number} width - Ancho propuesto en píxeles.
+   * @returns {void} Actualiza railWidth limitado a 56–240 píxeles y redibuja.
+   * @example
+   * resizeRail(160);
    */
   function resizeRail(width) {
     railWidth = Math.round(Math.max(railMin, Math.min(railMax, width)));
